@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronRight,
+  Download,
   FileText,
   Folder,
   FolderOpen,
@@ -13,8 +14,9 @@ import {
   FolderPlus,
 } from 'lucide-react';
 import type { Page } from '../../api/types';
+import { pageApi } from '../../api/endpoints';
 import type { PageTreeNode as TreeNode } from '../../lib/tree';
-import { cn } from '../../lib/utils';
+import { cn, downloadFile } from '../../lib/utils';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 
 export interface TreeActions {
@@ -106,14 +108,17 @@ export default function PageTreeNode({
                       actions.onNewSubpage(page, false);
                     }}
                   />
-                  <MenuItem
-                    icon={<FolderPlus size={13} />}
-                    label="New subfolder"
-                    onClick={() => {
-                      close();
-                      actions.onNewSubpage(page, true);
-                    }}
-                  />
+                  {/* Subfolders only make sense inside a folder — convert the page first. */}
+                  {page.is_folder && (
+                    <MenuItem
+                      icon={<FolderPlus size={13} />}
+                      label="New subfolder"
+                      onClick={() => {
+                        close();
+                        actions.onNewSubpage(page, true);
+                      }}
+                    />
+                  )}
                   <MenuItem
                     icon={<Pencil size={13} />}
                     label="Rename"
@@ -128,6 +133,14 @@ export default function PageTreeNode({
                     onClick={() => {
                       close();
                       actions.onToggleFolder(page);
+                    }}
+                  />
+                  <MenuItem
+                    icon={<Download size={13} />}
+                    label={page.is_folder ? 'Export as .zip' : 'Export as .md'}
+                    onClick={() => {
+                      close();
+                      downloadFile(pageApi.exportUrl(page.id));
                     }}
                   />
                   <MenuItem

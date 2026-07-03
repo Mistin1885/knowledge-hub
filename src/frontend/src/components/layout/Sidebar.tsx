@@ -34,7 +34,7 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="flex w-64 flex-none flex-col border-r border-neutral-200 bg-white">
+    <aside className="flex w-64 flex-none flex-col border-r border-neutral-200 bg-surface">
       <div className="border-b border-neutral-200 p-2">
         <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
         <form onSubmit={submitSearch} className="relative mt-2">

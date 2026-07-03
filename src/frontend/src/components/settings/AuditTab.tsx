@@ -22,7 +22,7 @@ export default function AuditTab({ workspace }: { workspace: Workspace }) {
   return (
     <div>
       {items.length === 0 && <EmptyState message="No audit entries yet." />}
-      <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">
+      <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-surface">
         {items.map((item) => (
           <div key={item.id} className="flex items-start gap-3 px-3 py-2.5">
             <span className="mt-0.5 flex-none rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[11px] text-neutral-600">

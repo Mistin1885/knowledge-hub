@@ -47,7 +47,7 @@ export default function TagPage() {
         {tagged.length === 0 && (
           <EmptyState message="No pages carry this tag (that you can see)." />
         )}
-        <div className="mt-4 divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">
+        <div className="mt-4 divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-surface">
           {tagged.map((page) => (
             <Link
               key={page.id}

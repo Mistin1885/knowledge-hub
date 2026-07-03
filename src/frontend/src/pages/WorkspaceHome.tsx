@@ -20,6 +20,22 @@ export default function WorkspaceHome() {
     [pagesQ.data],
   );
 
+  // Ancestor-folder prefix ("folder/sub folder") for each recent page.
+  const pathPrefix = useMemo(() => {
+    const byId = new Map((pagesQ.data ?? []).map((p) => [p.id, p]));
+    return (pageId: string): string => {
+      const segments: string[] = [];
+      let current = byId.get(pageId);
+      while (current?.parent_id && segments.length < 10) {
+        const parent = byId.get(current.parent_id);
+        if (!parent) break;
+        segments.unshift(parent.title || 'Untitled');
+        current = parent;
+      }
+      return segments.join('/');
+    };
+  }, [pagesQ.data]);
+
   if (pagesQ.isLoading) {
     return (
       <Centered>
@@ -78,7 +94,7 @@ export default function WorkspaceHome() {
         {recent.length === 0 && (
           <EmptyState message="Nothing here yet — create a page from the sidebar." />
         )}
-        <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">
+        <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-surface">
           {recent.map((page) => (
             <Link
               key={page.id}
@@ -91,6 +107,9 @@ export default function WorkspaceHome() {
                 <FileText size={14} className="flex-none text-neutral-400" />
               )}
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-neutral-800">
+                {pathPrefix(page.id) && (
+                  <span className="font-normal text-neutral-400">{pathPrefix(page.id)}/</span>
+                )}
                 {page.title || 'Untitled'}
               </span>
               {page.tags.slice(0, 3).map((tag) => (

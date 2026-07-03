@@ -2,6 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme palette — light values mirror the default Tailwind scales; the .dark
+   block remaps the same variables so every utility class is theme-aware. */
+:root {
+  --surface: 255 255 255;
+  --canvas: 250 250 249;
+  --primary: 79 70 229;
+  --primary-hover: 67 56 202;
+  --primary-muted: 165 180 252;
+  --danger: 220 38 38;
+  --danger-hover: 185 28 28;
+  --danger-muted: 252 165 165;
+
+  --neutral-50: 250 250 250;
+  --neutral-100: 245 245 245;
+  --neutral-200: 229 229 229;
+  --neutral-300: 212 212 212;
+  --neutral-400: 163 163 163;
+  --neutral-500: 115 115 115;
+  --neutral-600: 82 82 82;
+  --neutral-700: 64 64 64;
+  --neutral-800: 38 38 38;
+  --neutral-900: 23 23 23;
+
+  --indigo-50: 238 242 255;
+  --indigo-100: 224 231 255;
+  --indigo-200: 199 210 254;
+  --indigo-300: 165 180 252;
+  --indigo-400: 129 140 248;
+  --indigo-500: 99 102 241;
+  --indigo-600: 79 70 229;
+  --indigo-700: 67 56 202;
+  --indigo-900: 49 46 129;
+
+  --amber-50: 255 251 235;
+  --amber-200: 253 230 138;
+  --amber-300: 252 211 77;
+  --amber-400: 251 191 36;
+  --amber-600: 217 119 6;
+  --amber-700: 180 83 9;
+  --amber-800: 146 64 14;
+  --amber-900: 120 53 15;
+
+  --red-50: 254 242 242;
+  --red-200: 254 202 202;
+  --red-300: 252 165 165;
+  --red-500: 239 68 68;
+  --red-600: 220 38 38;
+  --red-700: 185 28 28;
+
+  --emerald-50: 236 253 245;
+  --emerald-400: 52 211 153;
+  --emerald-500: 16 185 129;
+  --emerald-600: 5 150 105;
+  --emerald-700: 4 120 87;
+}
+
+.dark {
+  --surface: 32 32 36;
+  --canvas: 23 23 26;
+  --primary: 99 102 241;
+  --primary-hover: 120 122 246;
+  --primary-muted: 62 64 122;
+  --danger: 225 72 72;
+  --danger-hover: 238 96 96;
+  --danger-muted: 110 50 52;
+
+  --neutral-50: 40 40 45;
+  --neutral-100: 48 48 54;
+  --neutral-200: 64 64 72;
+  --neutral-300: 84 84 94;
+  --neutral-400: 134 134 145;
+  --neutral-500: 160 160 170;
+  --neutral-600: 190 190 198;
+  --neutral-700: 213 213 219;
+  --neutral-800: 229 229 233;
+  --neutral-900: 245 245 247;
+
+  --indigo-50: 47 48 76;
+  --indigo-100: 57 59 94;
+  --indigo-200: 68 70 112;
+  --indigo-300: 100 104 162;
+  --indigo-400: 122 128 222;
+  --indigo-500: 129 140 248;
+  --indigo-600: 148 158 250;
+  --indigo-700: 172 180 252;
+  --indigo-900: 224 231 255;
+
+  --amber-50: 58 46 20;
+  --amber-200: 113 84 28;
+  --amber-300: 158 118 36;
+  --amber-400: 217 160 46;
+  --amber-600: 235 180 70;
+  --amber-700: 242 196 100;
+  --amber-800: 248 214 138;
+  --amber-900: 252 230 176;
+
+  --red-50: 62 30 32;
+  --red-200: 116 48 52;
+  --red-300: 150 62 66;
+  --red-500: 244 100 100;
+  --red-600: 248 122 122;
+  --red-700: 252 152 152;
+
+  --emerald-50: 22 52 42;
+  --emerald-400: 46 190 138;
+  --emerald-500: 52 205 150;
+  --emerald-600: 88 218 168;
+  --emerald-700: 118 228 186;
+
+  color-scheme: dark;
+}
+
 html,
 body,
 #root {
@@ -9,7 +121,7 @@ body,
 }
 
 body {
-  @apply bg-[#fafaf9] text-[13.5px] text-neutral-900 antialiased;
+  @apply bg-canvas text-[13.5px] text-neutral-900 antialiased;
 }
 
 /* ---------- Editor content typography ---------- */

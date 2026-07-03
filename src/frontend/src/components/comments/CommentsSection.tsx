@@ -54,7 +54,7 @@ export default function CommentsSection({
           <div
             key={comment.id}
             className={cn(
-              'rounded-md border border-neutral-200 bg-white px-3 py-2.5 transition-opacity duration-150',
+              'rounded-md border border-neutral-200 bg-surface px-3 py-2.5 transition-opacity duration-150',
               comment.resolved && 'opacity-60',
             )}
           >

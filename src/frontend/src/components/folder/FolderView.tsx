@@ -109,7 +109,7 @@ function FolderNotes({ page, canEdit }: { page: PageDetail; canEdit: boolean }) 
       readOnly={!canEdit}
       rows={Math.min(8, Math.max(2, value.split('\n').length))}
       placeholder="Folder notes — describe what belongs here, conventions, owners…"
-      className="w-full resize-none rounded-md border border-transparent bg-neutral-50 px-3 py-2 text-[13.5px] leading-relaxed text-neutral-700 outline-none transition-colors duration-150 placeholder:text-neutral-400 focus:border-neutral-200 focus:bg-white"
+      className="w-full resize-none rounded-md border border-transparent bg-neutral-50 px-3 py-2 text-[13.5px] leading-relaxed text-neutral-700 outline-none transition-colors duration-150 placeholder:text-neutral-400 focus:border-neutral-200 focus:bg-surface"
     />
   );
 }
@@ -125,7 +125,7 @@ function ChildCard({
 }) {
   const { page } = child;
   return (
-    <div className="group rounded-md border border-neutral-200 bg-white px-3 py-2.5 transition-colors duration-150 hover:border-neutral-300">
+    <div className="group rounded-md border border-neutral-200 bg-surface px-3 py-2.5 transition-colors duration-150 hover:border-neutral-300">
       <div className="flex items-center gap-2">
         <span className="w-5 flex-none text-center text-[15px] leading-none">
           {page.icon ||

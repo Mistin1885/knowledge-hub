@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 
 from app.api import serializers
 from app.api.deps import DB, CurrentUser
@@ -18,6 +18,7 @@ from app.api.schemas.pages import (
     VersionOut,
 )
 from app.modules.pages.infra import repo as pages_repo
+from app.modules.pages.services import export as export_service
 from app.modules.pages.services import pages as pages_service
 from app.modules.workspaces.services import policy
 from app.orchestration import index_page as pipeline
@@ -75,6 +76,24 @@ async def update_page(page_id: uuid.UUID, body: PageUpdateIn, user: CurrentUser,
 @router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_page(page_id: uuid.UUID, user: CurrentUser, s: DB):
     await pipeline.delete_page(s, user, page_id)
+
+
+@router.get("/pages/{page_id}/export")
+async def export_page(page_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
+    """Folder pages download as a zip of their subtree; regular pages as one .md file."""
+    page = await pages_service.get_for_read(s, user, page_id)
+    if page.is_folder:
+        filename, data = await export_service.export_folder(s, user, page_id)
+        media_type = "application/zip"
+        body: bytes | str = data
+    else:
+        filename, body = await export_service.export_page(s, user, page_id)
+        media_type = "text/markdown; charset=utf-8"
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Content-Disposition": export_service.content_disposition(filename)},
+    )
 
 
 @router.get("/pages/{page_id}/versions", response_model=list[VersionOut])

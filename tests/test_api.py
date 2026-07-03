@@ -273,3 +273,48 @@ async def test_folder_children_with_preview(client, alice):
     assert "cookie session" in login_api["preview"]
     assert "Login API" not in login_api["preview"]  # title line stripped
     assert login_api["page"]["metadata"]["note"] == "reviewed by alice"
+
+
+async def test_export_page_folder_and_workspace(client, alice):
+    import io
+    import zipfile
+
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    folder = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages", json={"title": "Guides", "is_folder": True}
+        )
+    ).json()
+    page = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages",
+            json={"title": "Setup", "parent_id": folder["id"], "content_md": "# Setup\nSteps."},
+        )
+    ).json()
+    await client.post(
+        f"/api/v1/workspaces/{wid}/pages", json={"title": "Root note", "content_md": "hello"}
+    )
+
+    # single page -> markdown file
+    resp = await client.get(f"/api/v1/pages/{page['id']}/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/markdown")
+    assert 'filename="Setup.md"' in resp.headers["content-disposition"]
+    assert resp.text == "# Setup\nSteps."
+
+    # folder -> zip of its subtree
+    resp = await client.get(f"/api/v1/pages/{folder['id']}/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/zip"
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+    assert "Setup.md" in zf.namelist()
+    assert zf.read("Setup.md").decode() == "# Setup\nSteps."
+
+    # workspace -> zip preserving folder structure
+    resp = await client.get(f"/api/v1/workspaces/{wid}/export")
+    assert resp.status_code == 200
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+    names = zf.namelist()
+    assert "Guides/Setup.md" in names
+    assert "Root note.md" in names

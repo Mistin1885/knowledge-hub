@@ -80,17 +80,13 @@ export interface PageVersion {
   id: string;
   version: number;
   title: string;
-  created_by: UserRef;
+  author: UserRef | null;
   created_at: string;
   summary: string | null;
 }
 
-export interface PageVersionDetail {
-  id: string;
-  version: number;
-  title: string;
+export interface PageVersionDetail extends PageVersion {
   content_md: string;
-  created_at: string;
 }
 
 export interface Comment {

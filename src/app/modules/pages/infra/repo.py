@@ -112,7 +112,9 @@ async def list_versions(s: AsyncSession, page_id: uuid.UUID) -> list[PageVersion
 
 async def get_version(s: AsyncSession, page_id: uuid.UUID, version_id: uuid.UUID) -> PageVersion | None:
     return await s.scalar(
-        select(PageVersion).where(PageVersion.id == version_id, PageVersion.page_id == page_id)
+        select(PageVersion)
+        .options(joinedload(PageVersion.author))
+        .where(PageVersion.id == version_id, PageVersion.page_id == page_id)
     )
 
 

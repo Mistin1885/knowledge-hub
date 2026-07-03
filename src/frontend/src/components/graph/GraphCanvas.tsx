@@ -55,6 +55,7 @@ export default function GraphCanvas({
 
     const draw = () => {
       const t = transformRef.current;
+      const dark = document.documentElement.classList.contains('dark');
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -69,7 +70,12 @@ export default function GraphCanvas({
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
         ctx.lineTo(g.x, g.y);
-        ctx.strokeStyle = link.kind === 'tag' ? 'rgba(245, 158, 11, 0.28)' : 'rgba(120, 113, 108, 0.28)';
+        ctx.strokeStyle =
+          link.kind === 'tag'
+            ? 'rgba(245, 158, 11, 0.28)'
+            : dark
+              ? 'rgba(168, 162, 158, 0.32)'
+              : 'rgba(120, 113, 108, 0.28)';
         ctx.lineWidth = 1 / t.k;
         ctx.stroke();
       }
@@ -90,7 +96,7 @@ export default function GraphCanvas({
 
       if (t.k >= 1) {
         ctx.font = `${11 / t.k}px ui-sans-serif, system-ui, sans-serif`;
-        ctx.fillStyle = '#57534e';
+        ctx.fillStyle = dark ? '#c4c0bc' : '#57534e';
         ctx.textAlign = 'center';
         for (const node of nodes) {
           if (node.x === undefined || node.y === undefined) continue;
@@ -233,7 +239,7 @@ export default function GraphCanvas({
       <canvas ref={canvasRef} className="block" />
       {tooltip && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-800 shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-md border border-neutral-200 bg-surface px-2 py-1 text-xs text-neutral-800 shadow-lg"
           style={{
             left: Math.min(tooltip.x + 12, (containerRef.current?.clientWidth ?? 300) - 160),
             top: tooltip.y + 12,

@@ -84,6 +84,7 @@ export const workspaceApi = {
   graph: (id: string, withTags: boolean) =>
     http.get<GraphData>(`/workspaces/${id}/graph?tags=${withTags ? 1 : 0}`),
   orphans: (id: string) => http.get<Page[]>(`/workspaces/${id}/orphans`),
+  exportUrl: (id: string) => `/api/v1/workspaces/${id}/export`,
   search: (id: string, params: SearchParams) =>
     http.get<SearchResponse>(`/workspaces/${id}/search?${searchQueryString(params)}`),
 };
@@ -127,6 +128,7 @@ export const pageApi = {
   get: (id: string) => http.get<PageDetail>(`/pages/${id}`),
   update: (id: string, data: UpdatePageInput) => http.patch<PageDetail>(`/pages/${id}`, data),
   remove: (id: string) => http.delete(`/pages/${id}`),
+  exportUrl: (id: string) => `/api/v1/pages/${id}/export`,
   versions: (id: string) => http.get<PageVersion[]>(`/pages/${id}/versions`),
   version: (id: string, versionId: string) =>
     http.get<PageVersionDetail>(`/pages/${id}/versions/${versionId}`),

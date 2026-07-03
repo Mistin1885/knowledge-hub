@@ -94,7 +94,7 @@ export default function MembersTab({ workspace, user }: { workspace: Workspace; 
       )}
 
       {members.length === 0 && <EmptyState message="No members yet." />}
-      <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">
+      <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-surface">
         {members.map((member) => {
           const isSelf = member.user_id === user.id;
           const canManage = isAdmin && member.role !== 'owner' && !isSelf;

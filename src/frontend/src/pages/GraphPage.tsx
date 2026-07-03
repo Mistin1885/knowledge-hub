@@ -30,7 +30,7 @@ export default function GraphPage() {
 
   return (
     <div className="relative h-full">
-      <div className="absolute left-3 top-3 z-10 flex items-center gap-3 rounded-md border border-neutral-200 bg-white px-3 py-1.5">
+      <div className="absolute left-3 top-3 z-10 flex items-center gap-3 rounded-md border border-neutral-200 bg-surface px-3 py-1.5">
         <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-neutral-700">
           <input
             type="checkbox"

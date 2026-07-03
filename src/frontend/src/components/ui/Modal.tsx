@@ -25,10 +25,10 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-neutral-900/25" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/30 dark:bg-black/60" onClick={onClose} />
       <div
         className={cn(
-          'relative flex max-h-[85vh] w-full flex-col rounded-lg border border-neutral-200 bg-white shadow-lg',
+          'relative flex max-h-[85vh] w-full flex-col rounded-lg border border-neutral-200 bg-surface shadow-lg',
           wide ? 'max-w-2xl' : 'max-w-md',
         )}
       >

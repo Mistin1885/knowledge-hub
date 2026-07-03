@@ -32,14 +32,14 @@ export function PresenceAvatars({ peers }: { peers: PeerUser[] }) {
         <span
           key={peer.clientId}
           title={peer.name}
-          className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[10px] font-semibold text-white"
+          className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface text-[10px] font-semibold text-white"
           style={{ backgroundColor: peer.color }}
         >
           {initials(peer.name)}
         </span>
       ))}
       {peers.length > shown.length && (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-neutral-300 text-[10px] font-semibold text-white">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface bg-neutral-300 text-[10px] font-semibold text-white">
           +{peers.length - shown.length}
         </span>
       )}

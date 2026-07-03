@@ -7,7 +7,7 @@ export default function AuthCard({ title, children }: { title: string; children:
         <p className="mb-6 text-center text-sm font-semibold tracking-tight text-indigo-600">
           Knowledge Hub
         </p>
-        <div className="rounded-lg border border-neutral-200 bg-white p-6">
+        <div className="rounded-lg border border-neutral-200 bg-surface p-6">
           <h1 className="mb-4 text-base font-semibold text-neutral-900">{title}</h1>
           {children}
         </div>

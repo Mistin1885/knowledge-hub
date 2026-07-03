@@ -23,7 +23,7 @@ export default function CreateLinkPopover({
   return (
     <div
       ref={ref}
-      className="fixed z-50 w-64 rounded-md border border-neutral-200 bg-white p-3 shadow-lg"
+      className="fixed z-50 w-64 rounded-md border border-neutral-200 bg-surface p-3 shadow-lg"
       style={{ left: Math.min(x, window.innerWidth - 280), top: y + 8 }}
     >
       <p className="text-[13px] text-neutral-700">

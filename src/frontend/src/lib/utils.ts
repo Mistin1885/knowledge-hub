@@ -24,6 +24,16 @@ export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Trigger a browser download of an authenticated same-origin URL. */
+export function downloadFile(url: string): void {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export function initials(name: string): string {
   const parts = name.split(/\s+/).filter(Boolean).slice(0, 2);
   const result = parts.map((p) => p.charAt(0).toUpperCase()).join('');

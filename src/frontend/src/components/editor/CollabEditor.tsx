@@ -18,6 +18,7 @@ import { colorForUser } from '../../lib/color';
 import { Wikilinks, type WikilinkAutocompleteState } from './wikilinks';
 import WikilinkSuggest from './WikilinkSuggest';
 import CreateLinkPopover from './CreateLinkPopover';
+import SelectionMenu from './SelectionMenu';
 import { ConnectionIndicator, PresenceAvatars, type CollabStatus, type PeerUser } from './indicators';
 
 interface Props {
@@ -40,6 +41,7 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
   const [createLink, setCreateLink] = useState<{ title: string; x: number; y: number } | null>(
     null,
   );
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const keyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
   const dismissedAtRef = useRef<number | null>(null);
@@ -162,9 +164,21 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
         <ConnectionIndicator status={status} />
         <PresenceAvatars peers={peers} />
       </div>
-      <div className="km-editor">
+      <div
+        className="km-editor"
+        onContextMenu={(e) => {
+          // Custom formatting menu only when text is selected; otherwise keep
+          // the native menu (spellcheck, paste, …).
+          if (!editor || !editable || editor.state.selection.empty) return;
+          e.preventDefault();
+          setContextMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
         <EditorContent editor={editor} />
       </div>
+      {contextMenu && editor && (
+        <SelectionMenu editor={editor} pos={contextMenu} onClose={() => setContextMenu(null)} />
+      )}
       {autocomplete && editor && (
         <WikilinkSuggest
           state={autocomplete}

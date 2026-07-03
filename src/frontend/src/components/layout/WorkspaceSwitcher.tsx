@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ChevronsUpDown, Plus } from 'lucide-react';
+import { Check, ChevronsUpDown, Download, Plus } from 'lucide-react';
 import type { Workspace } from '../../api/types';
+import { workspaceApi } from '../../api/endpoints';
+import { downloadFile } from '../../lib/utils';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 import CreateWorkspaceDialog from '../workspace/CreateWorkspaceDialog';
 
@@ -46,6 +48,14 @@ export default function WorkspaceSwitcher({
               </button>
             ))}
             <div className="my-1 border-t border-neutral-100" />
+            <MenuItem
+              icon={<Download size={14} />}
+              label="Export workspace (.zip)"
+              onClick={() => {
+                close();
+                downloadFile(workspaceApi.exportUrl(workspace.id));
+              }}
+            />
             <MenuItem
               icon={<Plus size={14} />}
               label="New workspace"

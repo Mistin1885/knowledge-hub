@@ -30,7 +30,7 @@ export default function RightSidebar({
 
   if (!open) {
     return (
-      <div className="flex w-10 flex-none flex-col items-center border-l border-neutral-200 bg-white pt-2">
+      <div className="flex w-10 flex-none flex-col items-center border-l border-neutral-200 bg-surface pt-2">
         <button
           onClick={() => setOpen(true)}
           title="Open panel"
@@ -43,7 +43,7 @@ export default function RightSidebar({
   }
 
   return (
-    <aside className="flex w-80 flex-none flex-col border-l border-neutral-200 bg-white">
+    <aside className="flex w-80 flex-none flex-col border-l border-neutral-200 bg-surface">
       <div className="flex items-center gap-0.5 border-b border-neutral-200 px-2 py-1.5">
         {TABS.map((t) => (
           <button

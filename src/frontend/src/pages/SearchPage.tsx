@@ -107,7 +107,7 @@ export default function SearchPage() {
                   'rounded-full border px-2 py-0.5 text-xs transition-colors duration-150',
                   tags.includes(tag.name)
                     ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-                    : 'border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300',
+                    : 'border-neutral-200 bg-surface text-neutral-500 hover:border-neutral-300',
                 )}
               >
                 #{tag.name}
@@ -139,7 +139,7 @@ export default function SearchPage() {
                   <Link
                     key={result.page.id}
                     to={`/w/${workspace.slug}/p/${result.page.id}`}
-                    className="block rounded-md border border-neutral-200 bg-white px-4 py-3 transition-colors duration-150 hover:border-indigo-200"
+                    className="block rounded-md border border-neutral-200 bg-surface px-4 py-3 transition-colors duration-150 hover:border-indigo-200"
                   >
                     <div className="flex items-center gap-2">
                       <p className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900">

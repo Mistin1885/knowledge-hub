@@ -53,9 +53,11 @@ status ∈ draft|published|archived   visibility ∈ workspace|private
 - `GET /pages/{id}/children` → `[{page, preview}]` — direct children ordered by position, with a plain-text content preview (folder view); per-item annotations live in the child's `metadata.note`
 - `PATCH /pages/{id}` any of `{title, content_md, parent_id, position, icon, status, visibility, tags, metadata, owner_id}` → `{pageDetail}`. Content patch returns `409` if a live collab session is active.
 - `DELETE /pages/{id}` → `204` (recursive; requires member+)
-- `GET /pages/{id}/versions` → `[{id, version, title, created_by: {id,name}, created_at, summary}]`
-- `GET /pages/{id}/versions/{vid}` → `{id, version, title, content_md, created_at}`
+- `GET /pages/{id}/versions` → `[{id, version, title, author: {id,name}|null, created_at, summary}]`
+- `GET /pages/{id}/versions/{vid}` → `{id, version, title, author, content_md, created_at, summary}`
 - `POST /pages/{id}/versions/{vid}/restore` → `{pageDetail}`
+- `GET /pages/{id}/export` → attachment download; regular page: `text/markdown` (`Title.md`), folder: `application/zip` of its visible subtree (folder structure preserved)
+- `GET /workspaces/{wid}/export` → `application/zip` of all pages visible to the caller, mirroring the page tree
 - `GET /pages/{id}/shares` / `POST {user_id}` / `DELETE /pages/{id}/shares/{user_id}` — private-page shares
 
 ### Comments

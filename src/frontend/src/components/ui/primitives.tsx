@@ -13,11 +13,11 @@ type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'danger';
 
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
   primary:
-    'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300 border border-transparent',
+    'bg-primary text-white hover:bg-primary-hover disabled:bg-primary-muted border border-transparent',
   outline:
-    'border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400',
+    'border border-neutral-200 bg-surface text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400',
   ghost: 'border border-transparent text-neutral-600 hover:bg-neutral-100 disabled:text-neutral-400',
-  danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300 border border-transparent',
+  danger: 'bg-danger text-white hover:bg-danger-hover disabled:bg-danger-muted border border-transparent',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -54,7 +54,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       <input
         ref={ref}
         className={cn(
-          'h-8 w-full rounded-md border border-neutral-200 bg-white px-2.5 text-[13px] text-neutral-900',
+          'h-8 w-full rounded-md border border-neutral-200 bg-surface px-2.5 text-[13px] text-neutral-900',
           'placeholder:text-neutral-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100',
           'transition-colors duration-150',
           className,
@@ -71,7 +71,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
       <textarea
         ref={ref}
         className={cn(
-          'w-full rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] text-neutral-900',
+          'w-full rounded-md border border-neutral-200 bg-surface px-2.5 py-1.5 text-[13px] text-neutral-900',
           'placeholder:text-neutral-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100',
           'transition-colors duration-150',
           className,
@@ -88,7 +88,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       <select
         ref={ref}
         className={cn(
-          'h-8 rounded-md border border-neutral-200 bg-white px-2 text-[13px] text-neutral-900',
+          'h-8 rounded-md border border-neutral-200 bg-surface px-2 text-[13px] text-neutral-900',
           'focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100',
           className,
         )}

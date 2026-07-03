@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.api.deps import DB, CurrentUser
 from app.api.schemas.workspaces import (
@@ -15,6 +15,7 @@ from app.api.schemas.workspaces import (
     WorkspaceUpdateIn,
 )
 from app.modules.audit.infra import repo as audit_repo
+from app.modules.pages.services import export as export_service
 from app.modules.workspaces.services import policy, workspaces
 from app.shared.constants import Permission, Role, role_permissions
 from app.shared.exceptions import ValidationFailedError
@@ -59,6 +60,17 @@ async def update_workspace(
 @router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workspace(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
     await workspaces.delete(s, user, workspace_id)
+
+
+@router.get("/{workspace_id}/export")
+async def export_workspace(workspace_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
+    """All pages the user can see, zipped with the folder structure preserved."""
+    filename, data = await export_service.export_workspace(s, user, workspace_id)
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": export_service.content_disposition(filename)},
+    )
 
 
 @router.get("/{workspace_id}/members", response_model=list[MemberOut])

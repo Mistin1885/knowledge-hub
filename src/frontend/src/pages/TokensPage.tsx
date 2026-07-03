@@ -28,7 +28,7 @@ function NewTokenReveal({ token, onDismiss }: { token: CreatedApiToken; onDismis
         Token “{token.name}” created — copy it now, it will not be shown again.
       </p>
       <div className="mt-2 flex items-center gap-2">
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded border border-indigo-200 bg-white px-2 py-1.5 font-mono text-xs text-neutral-800">
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded border border-indigo-200 bg-surface px-2 py-1.5 font-mono text-xs text-neutral-800">
           {token.token}
         </code>
         <Button size="sm" onClick={() => void copy()}>
@@ -118,7 +118,7 @@ export default function TokensPage() {
             <EmptyState message="No tokens yet — create one above." />
           )}
           {tokensQ.data && tokensQ.data.length > 0 && (
-            <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-white">
+            <div className="divide-y divide-neutral-100 rounded-md border border-neutral-200 bg-surface">
               {tokensQ.data.map((token) => (
                 <div key={token.id} className="flex items-center gap-3 px-3 py-2.5">
                   <div className="min-w-0 flex-1">

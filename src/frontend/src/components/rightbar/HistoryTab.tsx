@@ -41,7 +41,7 @@ export default function HistoryTab({ page, canEdit }: { page: PageDetail; canEdi
             <span className="min-w-0 flex-1 truncate text-[13px] text-neutral-800">{v.title}</span>
           </div>
           <p className="mt-0.5 text-[11px] text-neutral-400">
-            {v.created_by.name} · {timeAgo(v.created_at)}
+            {v.author?.name ?? 'Unknown'} · {timeAgo(v.created_at)}
             {v.summary ? ` · ${v.summary}` : ''}
           </p>
         </button>

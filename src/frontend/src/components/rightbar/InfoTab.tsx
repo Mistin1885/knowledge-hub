@@ -226,7 +226,7 @@ export default function InfoTab({
             onClick={() => v !== page.visibility && update.mutate({ visibility: v })}
             className={`flex-1 rounded px-2 py-1 text-xs font-medium capitalize transition-colors duration-150 ${
               page.visibility === v
-                ? 'bg-white text-neutral-900 shadow-sm'
+                ? 'bg-surface text-neutral-900 shadow-sm'
                 : 'text-neutral-500 hover:text-neutral-700'
             }`}
           >

@@ -61,7 +61,7 @@ export default function WikilinkSuggest({
 
   return (
     <div
-      className="fixed z-50 w-64 overflow-hidden rounded-md border border-neutral-200 bg-white py-1 shadow-lg"
+      className="fixed z-50 w-64 overflow-hidden rounded-md border border-neutral-200 bg-surface py-1 shadow-lg"
       style={{ left: state.left, top: state.bottom + 4 }}
     >
       {filtered.length === 0 && (
