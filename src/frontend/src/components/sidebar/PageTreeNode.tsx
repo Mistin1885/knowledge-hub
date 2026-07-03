@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronDown,
@@ -24,7 +25,11 @@ export interface TreeActions {
   onRename: (page: Page) => void;
   onDelete: (page: Page) => void;
   onToggleFolder: (page: Page) => void;
+  onMovePage: (pageId: string, parentId: string | null) => void;
 }
+
+/** dataTransfer type for dragging a page row between tree levels. */
+export const PAGE_DND_TYPE = 'application/x-km-page';
 
 export default function PageTreeNode({
   node,
@@ -49,15 +54,47 @@ export default function PageTreeNode({
   const isExpanded = expanded.has(page.id);
   const hasChildren = children.length > 0;
   const isCurrent = page.id === currentPageId;
+  const [dragOver, setDragOver] = useState(false);
 
   const FolderIcon = isExpanded ? FolderOpen : Folder;
 
   return (
     <div>
       <div
+        data-tree-row
+        draggable={canEdit}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          e.dataTransfer.setData(PAGE_DND_TYPE, page.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragOver={
+          page.is_folder && canEdit
+            ? (e) => {
+                if (!e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+                setDragOver(true);
+              }
+            : undefined
+        }
+        onDragLeave={page.is_folder ? () => setDragOver(false) : undefined}
+        onDrop={
+          page.is_folder && canEdit
+            ? (e) => {
+                if (!e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setDragOver(false);
+                actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), page.id);
+              }
+            : undefined
+        }
         className={cn(
           'group flex items-center gap-1 rounded-md py-1 pr-1 transition-colors duration-150',
           isCurrent ? 'bg-indigo-50 text-indigo-700' : 'text-neutral-700 hover:bg-neutral-100',
+          dragOver && 'bg-indigo-50 ring-1 ring-inset ring-indigo-300',
         )}
         style={{ paddingLeft: `${depth * 14 + 2}px` }}
       >

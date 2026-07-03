@@ -196,6 +196,14 @@ export interface CreatedApiToken {
   token: string;
 }
 
+export interface Attachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  url: string;
+}
+
 export interface PageShare {
   user_id: string;
   name?: string;

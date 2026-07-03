@@ -1,6 +1,8 @@
 import os
+import tempfile
 
 os.environ["KM_DATABASE_URL"] = "postgresql+asyncpg://km@localhost:5433/km_test"
+os.environ["KM_UPLOADS_DIR"] = tempfile.mkdtemp(prefix="km-test-uploads-")
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402

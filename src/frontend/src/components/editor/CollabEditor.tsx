@@ -11,14 +11,38 @@ import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import type { EditorView } from '@tiptap/pm/view';
 import { ShieldAlert } from 'lucide-react';
 import type { Page, User, Workspace } from '../../api/types';
+import { pageApi } from '../../api/endpoints';
 import { useCreatePage } from '../../hooks/mutations';
 import { colorForUser } from '../../lib/color';
 import { Wikilinks, type WikilinkAutocompleteState } from './wikilinks';
 import WikilinkSuggest from './WikilinkSuggest';
 import CreateLinkPopover from './CreateLinkPopover';
 import SelectionMenu from './SelectionMenu';
+import BlockDragHandle from './BlockDragHandle';
+
+/** Upload image files as page attachments and insert image nodes at `pos`. */
+async function insertImagesAt(view: EditorView, pageId: string, files: File[], pos: number) {
+  let insertAt = pos;
+  for (const file of files) {
+    try {
+      const att = await pageApi.uploadAttachment(pageId, file);
+      const { state } = view;
+      const node = state.schema.nodes.image.create({ src: att.url, alt: att.filename });
+      const at = Math.min(insertAt, state.doc.content.size);
+      view.dispatch(state.tr.insert(at, node));
+      insertAt = at + node.nodeSize;
+    } catch (err) {
+      console.error('Image upload failed:', err);
+    }
+  }
+}
+
+function imageFiles(list: DataTransfer | null): File[] {
+  return Array.from(list?.files ?? []).filter((f) => f.type.startsWith('image/'));
+}
 import { ConnectionIndicator, PresenceAvatars, type CollabStatus, type PeerUser } from './indicators';
 
 interface Props {
@@ -113,8 +137,31 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
 
   const editor = useEditor({
     editable,
+    editorProps: {
+      // Paste/drop images: upload as page attachments, insert served URLs so
+      // the markdown keeps a stable /api/v1/attachments/... reference.
+      handlePaste: (view, event) => {
+        const files = imageFiles(event.clipboardData);
+        if (files.length === 0 || !view.editable) return false;
+        event.preventDefault();
+        void insertImagesAt(view, pageId, files, view.state.selection.to);
+        return true;
+      },
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved) return false; // internal block drag — let ProseMirror move it
+        const files = imageFiles(event.dataTransfer);
+        if (files.length === 0 || !view.editable) return false;
+        event.preventDefault();
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        void insertImagesAt(view, pageId, files, coords?.pos ?? view.state.selection.to);
+        return true;
+      },
+    },
     extensions: [
-      StarterKit.configure({ history: false }),
+      StarterKit.configure({
+        history: false,
+        dropcursor: { color: 'rgb(99 102 241)', width: 2 },
+      }),
       Link.configure({ openOnClick: false }),
       Image,
       TaskList,
@@ -165,7 +212,7 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
         <PresenceAvatars peers={peers} />
       </div>
       <div
-        className="km-editor"
+        className="km-editor relative"
         onContextMenu={(e) => {
           // Custom formatting menu only when text is selected; otherwise keep
           // the native menu (spellcheck, paste, …).
@@ -175,6 +222,7 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
         }}
       >
         <EditorContent editor={editor} />
+        {editor && editable && <BlockDragHandle editor={editor} />}
       </div>
       {contextMenu && editor && (
         <SelectionMenu editor={editor} pos={contextMenu} onClose={() => setContextMenu(null)} />

@@ -318,3 +318,50 @@ async def test_export_page_folder_and_workspace(client, alice):
     names = zf.namelist()
     assert "Guides/Setup.md" in names
     assert "Root note.md" in names
+
+
+async def test_move_page_between_levels(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    folder = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages", json={"title": "F", "is_folder": True}
+        )
+    ).json()
+    page = (
+        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "P"})
+    ).json()
+
+    # root -> folder
+    resp = await client.patch(f"/api/v1/pages/{page['id']}", json={"parent_id": folder["id"]})
+    assert resp.status_code == 200 and resp.json()["parent_id"] == folder["id"]
+
+    # folder -> root (explicit null must clear the parent)
+    resp = await client.patch(f"/api/v1/pages/{page['id']}", json={"parent_id": None})
+    assert resp.status_code == 200 and resp.json()["parent_id"] is None
+
+    # cycle guard: folder cannot move under its own descendant
+    await client.patch(f"/api/v1/pages/{page['id']}", json={"parent_id": folder["id"]})
+    resp = await client.patch(f"/api/v1/pages/{folder['id']}", json={"parent_id": page["id"]})
+    assert resp.status_code == 422
+
+
+async def test_attachment_upload_roundtrip(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    page = (
+        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Pics"})
+    ).json()
+
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    resp = await client.post(
+        f"/api/v1/pages/{page['id']}/attachments",
+        files={"file": ("shot.png", png, "image/png")},
+    )
+    assert resp.status_code == 201, resp.text
+    att = resp.json()
+    assert att["url"].startswith("/api/v1/attachments/")
+
+    resp = await client.get(att["url"])
+    assert resp.status_code == 200
+    assert resp.content == png

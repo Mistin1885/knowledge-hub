@@ -8,7 +8,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ancestorIds, buildPageTree } from '../../lib/tree';
 import { ConfirmDialog, PromptDialog } from '../ui/Modal';
 import { EmptyState, Spinner } from '../ui/primitives';
-import PageTreeNode, { type TreeActions } from './PageTreeNode';
+import PageTreeNode, { PAGE_DND_TYPE, type TreeActions } from './PageTreeNode';
+
+function cnRootDrop(active: boolean): string {
+  return active
+    ? 'mt-1 flex h-8 items-center justify-center rounded-md border border-dashed border-indigo-300 bg-indigo-50 text-[11px] text-indigo-600'
+    : 'h-4';
+}
 
 export default function PageTree({ workspace }: { workspace: Workspace }) {
   const pagesQ = usePages(workspace.id);
@@ -23,6 +29,7 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [renaming, setRenaming] = useState<Page | null>(null);
   const [deleting, setDeleting] = useState<Page | null>(null);
+  const [rootDragOver, setRootDragOver] = useState(false);
 
   const pages = useMemo(() => pagesQ.data ?? [], [pagesQ.data]);
   const tree = useMemo(() => buildPageTree(pages), [pages]);
@@ -69,6 +76,28 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
         .then(() => qc.invalidateQueries({ queryKey: ['pages', workspace.id] }))
         .catch(() => qc.invalidateQueries({ queryKey: ['pages', workspace.id] }));
     },
+    onMovePage: (pageId, parentId) => {
+      const dragged = pages.find((p) => p.id === pageId);
+      if (!dragged) return;
+      if (parentId === null) {
+        if (dragged.parent_id === null) return;
+      } else {
+        // no-ops and cycles: onto itself, same parent, or into its own subtree
+        if (parentId === pageId || dragged.parent_id === parentId) return;
+        if ([parentId, ...ancestorIds(pages, parentId)].includes(pageId)) return;
+      }
+      const refresh = () => {
+        qc.invalidateQueries({ queryKey: ['pages', workspace.id] });
+        qc.invalidateQueries({ queryKey: ['children'] });
+      };
+      void pageApi
+        .update(pageId, { parent_id: parentId })
+        .then(() => {
+          if (parentId) setExpanded((prev) => new Set(prev).add(parentId));
+          refresh();
+        })
+        .catch(refresh);
+    },
   };
 
   const canEdit = workspace.my_role !== 'viewer';
@@ -88,7 +117,27 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
   }
 
   return (
-    <div>
+    <div
+      onDragOver={(e) => {
+        // Empty space below the rows (and non-folder rows bubble here) moves
+        // the page to the top level; folder rows handle their own drop.
+        if (!canEdit || !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+        if ((e.target as HTMLElement).closest('[data-tree-row]')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setRootDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootDragOver(false);
+      }}
+      onDrop={(e) => {
+        if (!canEdit || !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+        if ((e.target as HTMLElement).closest('[data-tree-row]')) return;
+        e.preventDefault();
+        setRootDragOver(false);
+        actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), null);
+      }}
+    >
       {tree.map((node) => (
         <PageTreeNode
           key={node.page.id}
@@ -102,6 +151,12 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
           canEdit={canEdit}
         />
       ))}
+      <div
+        className={cnRootDrop(rootDragOver)}
+        aria-hidden
+      >
+        {rootDragOver ? 'Move to top level' : ''}
+      </div>
       {renaming && (
         <RenameDialog
           page={renaming}

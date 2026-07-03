@@ -221,6 +221,11 @@ body {
   @apply pointer-events-none float-left h-0 text-neutral-400;
 }
 
+/* Block selected via the drag handle (NodeSelection) */
+.km-editor .ProseMirror-selectednode {
+  @apply rounded-sm bg-indigo-50/50 outline outline-2 outline-indigo-200;
+}
+
 /* ---------- Wikilink decorations ---------- */
 
 .km-editor .wikilink {

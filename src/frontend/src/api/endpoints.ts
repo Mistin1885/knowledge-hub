@@ -1,6 +1,7 @@
-import { http } from './client';
+import { http, request } from './client';
 import type {
   ApiToken,
+  Attachment,
   AuditResponse,
   Backlink,
   Comment,
@@ -142,6 +143,11 @@ export const pageApi = {
   comments: (id: string) => http.get<Comment[]>(`/pages/${id}/comments`),
   addComment: (id: string, body_md: string, anchor?: string) =>
     http.post<Comment>(`/pages/${id}/comments`, { body_md, ...(anchor ? { anchor } : {}) }),
+  uploadAttachment: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return request<Attachment>(`/pages/${id}/attachments`, { method: 'POST', body: form });
+  },
   shares: (id: string) => http.get<PageShare[]>(`/pages/${id}/shares`),
   addShare: (id: string, userId: string) =>
     http.post<PageShare>(`/pages/${id}/shares`, { user_id: userId }),
