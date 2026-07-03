@@ -26,9 +26,14 @@ IDs are UUID strings. Timestamps are ISO-8601 UTC.
 - `GET /workspaces/{id}` → `{workspace}`
 - `PATCH /workspaces/{id}` (admin) → `{workspace}`
 - `DELETE /workspaces/{id}` (owner) → `204`
-- `GET /workspaces/{id}/members` → `[{user_id, email, name, role, joined_at}]`
-- `POST /workspaces/{id}/members` (admin) `{email, role}` → `201` (user must exist)
-- `PATCH /workspaces/{id}/members/{user_id}` (admin) `{role}` → `200`
+Roles are named permission bundles: `viewer`=read, `member`=read+write,
+`admin`=+manage (members/settings/audit), `owner`=+own (delete/transfer).
+Non-members get 404 on every workspace surface. Member endpoints accept either
+`role` or the shorthand `access: "read"|"write"` (maps to viewer/member).
+
+- `GET /workspaces/{id}/members` → `[{user_id, email, name, role, permissions: ["read","write",...], joined_at}]`
+- `POST /workspaces/{id}/members` (admin) `{email, role}` or `{email, access}` → `201` (user must exist)
+- `PATCH /workspaces/{id}/members/{user_id}` (admin) `{role}` or `{access}` → `200`
 - `DELETE /workspaces/{id}/members/{user_id}` (admin, or self-leave) → `204`
 - `GET /workspaces/{id}/audit?limit=&cursor=` (admin) → `{items: [{id, actor: {id,name}, action, target_type, target_id, target_title, detail, created_at}], next_cursor}`
 

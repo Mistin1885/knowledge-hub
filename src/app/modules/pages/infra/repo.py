@@ -253,10 +253,19 @@ async def set_mentions(s: AsyncSession, comment_id: uuid.UUID, user_ids: set[uui
 
 
 async def list_mentions_for_user(s: AsyncSession, user_id: uuid.UUID) -> list[tuple]:
+    from app.infra.db.models import WorkspaceMember
+
     rows = await s.execute(
         select(CommentMention, Comment, Page.id, Page.title)
         .join(Comment, Comment.id == CommentMention.comment_id)
         .join(Page, Page.id == Comment.page_id)
+        # only workspaces the user can still access — old mentions must not
+        # leak content after access is revoked
+        .join(
+            WorkspaceMember,
+            (WorkspaceMember.workspace_id == Page.workspace_id)
+            & (WorkspaceMember.user_id == user_id),
+        )
         .options(joinedload(Comment.author))
         .where(CommentMention.user_id == user_id)
         .order_by(CommentMention.created_at.desc())

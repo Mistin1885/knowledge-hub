@@ -16,7 +16,8 @@ from app.api.schemas.workspaces import (
 )
 from app.modules.audit.infra import repo as audit_repo
 from app.modules.workspaces.services import policy, workspaces
-from app.shared.constants import Role
+from app.shared.constants import Permission, Role, role_permissions
+from app.shared.exceptions import ValidationFailedError
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -65,7 +66,8 @@ async def list_members(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
     return [
         MemberOut(
             user_id=m.user_id, email=m.user.email, name=m.user.name,
-            role=Role(m.role), joined_at=m.joined_at,
+            role=Role(m.role), permissions=role_permissions(Role(m.role)),
+            joined_at=m.joined_at,
         )
         for m in await workspaces.list_members(s, user, workspace_id)
     ]
@@ -73,7 +75,7 @@ async def list_members(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
 
 @router.post("/{workspace_id}/members", status_code=status.HTTP_201_CREATED)
 async def add_member(workspace_id: uuid.UUID, body: MemberAddIn, user: CurrentUser, s: DB):
-    await workspaces.add_member(s, user, workspace_id, body.email, body.role)
+    await workspaces.add_member(s, user, workspace_id, body.email, body.effective_role())
     return {"ok": True}
 
 
@@ -82,7 +84,10 @@ async def change_member_role(
     workspace_id: uuid.UUID, member_user_id: uuid.UUID, body: MemberUpdateIn,
     user: CurrentUser, s: DB,
 ):
-    await workspaces.change_role(s, user, workspace_id, member_user_id, body.role)
+    role = body.effective_role()
+    if role is None:
+        raise ValidationFailedError("Provide either 'role' or 'access' (read|write)")
+    await workspaces.change_role(s, user, workspace_id, member_user_id, role)
     return {"ok": True}
 
 
@@ -101,7 +106,7 @@ async def audit_log(
     limit: int = Query(default=50, le=200),
     cursor: datetime | None = None,
 ):
-    await policy.require_role(s, user, workspace_id, Role.ADMIN)
+    await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
     entries = await audit_repo.list_for_workspace(s, workspace_id, limit=limit, before=cursor)
     items = [
         AuditEntryOut(

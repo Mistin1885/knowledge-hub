@@ -72,9 +72,9 @@ async def delete(s: AsyncSession, user: User, comment_id: uuid.UUID) -> None:
     page = await pages_service.get_for_read(s, user, comment.page_id)
     if comment.author_id != user.id:
         from app.modules.workspaces.services import policy
-        from app.shared.constants import Role
+        from app.shared.constants import Permission
 
-        await policy.require_role(s, user, page.workspace_id, Role.ADMIN)
+        await policy.require_permission(s, user, page.workspace_id, Permission.MANAGE)
     await s.delete(comment)
 
 

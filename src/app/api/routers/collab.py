@@ -7,7 +7,7 @@ from app.infra.db.engine import session_factory
 from app.modules.collab.services import rooms
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.workspaces.services import policy
-from app.shared.constants import ROLE_RANK, Role
+from app.shared.constants import Permission
 from app.shared.utils import stable_color
 
 router = APIRouter(tags=["collab"])  # REST endpoints under /api/v1
@@ -30,7 +30,7 @@ async def collab_socket(ws: WebSocket, page_id: uuid.UUID):
             await ws.close(code=WS_FORBIDDEN)
             return
         role = await policy.role_in_workspace(s, user, page.workspace_id)
-        can_edit = role is not None and ROLE_RANK[role] >= ROLE_RANK[Role.MEMBER]
+        can_edit = policy.role_has(role, Permission.WRITE)
         await s.commit()
 
     display = {"name": user.name, "color": stable_color(str(user.id))}

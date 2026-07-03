@@ -20,7 +20,7 @@ from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import pages as pages_service
 from app.modules.workspaces.services import policy
 from app.orchestration import index_page as pipeline
-from app.shared.constants import Role
+from app.shared.constants import Permission
 
 router = APIRouter(tags=["pages"])
 
@@ -99,7 +99,7 @@ async def remove_share(page_id: uuid.UUID, target_user_id: uuid.UUID, user: Curr
 
 @router.get("/workspaces/{workspace_id}/tags", response_model=list[TagOut])
 async def list_tags(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     return [
         TagOut(name=name, page_count=count)
         for name, count in await pages_repo.list_workspace_tags(s, workspace_id)
@@ -108,6 +108,6 @@ async def list_tags(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
 
 @router.get("/workspaces/{workspace_id}/metadata-keys", response_model=list[MetadataKeyOut])
 async def metadata_keys(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     keys = await pages_repo.workspace_metadata_keys(s, workspace_id)
     return [MetadataKeyOut(key=k, values=v) for k, v in keys.items()]

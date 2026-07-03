@@ -6,13 +6,13 @@ from app.infra.db.models import User
 from app.modules.links.infra import repo
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.workspaces.services import policy
-from app.shared.constants import Role
+from app.shared.constants import Permission
 
 
 async def workspace_graph(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, include_tags: bool = True
 ) -> dict:
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     visible = await pages_repo.list_workspace(
         s, workspace_id, policy.visible_pages_filter(user.id)
     )

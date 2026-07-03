@@ -6,7 +6,7 @@ from app.infra.db.models import User, Workspace, WorkspaceMember
 from app.modules.audit.services import audit
 from app.modules.workspaces.infra import repo
 from app.modules.workspaces.services import policy
-from app.shared.constants import Role
+from app.shared.constants import Permission, Role
 from app.shared.exceptions import ConflictError, NotFoundError, ValidationFailedError
 from app.shared.utils import slugify
 
@@ -36,7 +36,7 @@ async def list_mine(s: AsyncSession, user: User) -> list[tuple[Workspace, str]]:
 
 
 async def get_for_user(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> tuple[Workspace, Role]:
-    role = await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    role = await policy.require_permission(s, user, workspace_id, Permission.READ)
     ws = await repo.get(s, workspace_id)
     if ws is None:
         raise NotFoundError("Workspace not found")
@@ -46,7 +46,7 @@ async def get_for_user(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> 
 async def update(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, **fields
 ) -> tuple[Workspace, Role]:
-    role = await policy.require_role(s, user, workspace_id, Role.ADMIN)
+    role = await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
     ws = await repo.get(s, workspace_id)
     if ws is None:
         raise NotFoundError("Workspace not found")
@@ -61,7 +61,7 @@ async def update(
 
 
 async def delete(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> None:
-    await policy.require_role(s, user, workspace_id, Role.OWNER)
+    await policy.require_permission(s, user, workspace_id, Permission.OWN)
     ws = await repo.get(s, workspace_id)
     if ws is None:
         raise NotFoundError("Workspace not found")
@@ -75,16 +75,16 @@ async def delete(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> None:
 async def list_members(
     s: AsyncSession, user: User, workspace_id: uuid.UUID
 ) -> list[WorkspaceMember]:
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     return await repo.list_members(s, workspace_id)
 
 
 async def add_member(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, email: str, role: Role
 ) -> WorkspaceMember:
-    await policy.require_role(s, user, workspace_id, Role.ADMIN)
+    await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
     if role == Role.OWNER:
-        await policy.require_role(s, user, workspace_id, Role.OWNER)
+        await policy.require_permission(s, user, workspace_id, Permission.OWN)
     target = await repo.get_user_by_email(s, email)
     if target is None:
         raise NotFoundError(f"No user with email {email} — they must register first")
@@ -102,12 +102,12 @@ async def add_member(
 async def change_role(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, target_user_id: uuid.UUID, role: Role
 ) -> WorkspaceMember:
-    await policy.require_role(s, user, workspace_id, Role.ADMIN)
+    await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
     member = await repo.get_member(s, workspace_id, target_user_id)
     if member is None:
         raise NotFoundError("Member not found")
     if role == Role.OWNER or member.role == Role.OWNER:
-        await policy.require_role(s, user, workspace_id, Role.OWNER)
+        await policy.require_permission(s, user, workspace_id, Permission.OWN)
     if member.role == Role.OWNER and role != Role.OWNER:
         if await repo.count_owners(s, workspace_id) <= 1:
             raise ValidationFailedError("Workspace must keep at least one owner")
@@ -123,7 +123,7 @@ async def remove_member(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, target_user_id: uuid.UUID
 ) -> None:
     if user.id != target_user_id:  # self-leave is always allowed
-        await policy.require_role(s, user, workspace_id, Role.ADMIN)
+        await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
     member = await repo.get_member(s, workspace_id, target_user_id)
     if member is None:
         raise NotFoundError("Member not found")

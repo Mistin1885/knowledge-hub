@@ -63,9 +63,9 @@ async def unlinked_mentions(s: AsyncSession, user: User, page_id: uuid.UUID) -> 
 
 
 async def orphans(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> list[Page]:
-    from app.shared.constants import Role
+    from app.shared.constants import Permission
 
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     linked_as_source = select(PageLink.source_page_id)
     linked_as_target = select(PageLink.target_page_id).where(PageLink.target_page_id.is_not(None))
     return list(
@@ -86,9 +86,9 @@ async def orphans(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> list[
 async def resolve_title_to_page(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, title: str
 ) -> Page | None:
-    from app.shared.constants import Role
+    from app.shared.constants import Permission
 
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     page_id = await repo.resolve_title(s, workspace_id, title)
     if page_id is None:
         return None

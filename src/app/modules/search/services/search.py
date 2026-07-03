@@ -7,7 +7,7 @@ from app.infra.db.models import Page, PageMetadata, User
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.search.infra import embeddings, repo
 from app.modules.workspaces.services import policy
-from app.shared.constants import Role
+from app.shared.constants import Permission
 
 
 async def _apply_filters(
@@ -47,7 +47,7 @@ async def search(
     mode: str = "hybrid",
     limit: int = 20,
 ) -> dict:
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     tags, metadata = tags or [], metadata or {}
     query = query.strip()
 
@@ -150,7 +150,7 @@ async def ask(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, question: str, limit: int = 8
 ) -> dict:
     """Retrieval with citations: best chunks for a natural-language question."""
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     chunks: list[dict] = []
     seen: set[tuple[uuid.UUID, int]] = set()
 

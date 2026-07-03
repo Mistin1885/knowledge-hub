@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infra.db.models import Page, PageShare, User
 from app.modules.workspaces.infra import repo
-from app.shared.constants import ROLE_RANK, PageVisibility, Role
+from app.shared.constants import (
+    PERMISSION_MIN_ROLE,
+    ROLE_RANK,
+    PageVisibility,
+    Permission,
+    Role,
+)
 from app.shared.exceptions import NotFoundError, PermissionDeniedError
 
 
@@ -16,15 +22,21 @@ async def role_in_workspace(s: AsyncSession, user: User, workspace_id: uuid.UUID
     return Role(member.role) if member else None
 
 
-async def require_role(
-    s: AsyncSession, user: User, workspace_id: uuid.UUID, minimum: Role
+def role_has(role: Role | None, permission: Permission) -> bool:
+    return role is not None and ROLE_RANK[role] >= ROLE_RANK[PERMISSION_MIN_ROLE[permission]]
+
+
+async def require_permission(
+    s: AsyncSession, user: User, workspace_id: uuid.UUID, permission: Permission
 ) -> Role:
+    """Single gate for workspace access. No membership -> the workspace does
+    not exist for this user (404); insufficient permission -> 403."""
     role = await role_in_workspace(s, user, workspace_id)
     if role is None:
         # hide existence from non-members
         raise NotFoundError("Workspace not found")
-    if ROLE_RANK[role] < ROLE_RANK[minimum]:
-        raise PermissionDeniedError(f"Requires {minimum} role")
+    if not role_has(role, permission):
+        raise PermissionDeniedError(f"Requires {permission} permission on this workspace")
     return role
 
 
@@ -50,8 +62,8 @@ async def require_page_read(s: AsyncSession, user: User, page: Page) -> None:
 async def require_page_edit(s: AsyncSession, user: User, page: Page) -> None:
     await require_page_read(s, user, page)
     role = await role_in_workspace(s, user, page.workspace_id)
-    if role is None or ROLE_RANK[role] < ROLE_RANK[Role.MEMBER]:
-        raise PermissionDeniedError("Viewers cannot edit pages")
+    if not role_has(role, Permission.WRITE):
+        raise PermissionDeniedError("You have read-only access to this workspace")
 
 
 def visible_pages_filter(user_id: uuid.UUID):

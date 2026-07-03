@@ -28,6 +28,7 @@ export interface Member {
   email: string;
   name: string;
   role: Role;
+  permissions: ('read' | 'write' | 'manage' | 'own')[];
   joined_at: string;
 }
 

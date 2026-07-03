@@ -6,7 +6,7 @@ from app.infra.db.models import Page, PageShare, PageVersion, User
 from app.modules.audit.services import audit
 from app.modules.pages.infra import repo
 from app.modules.workspaces.services import policy
-from app.shared.constants import PageStatus, PageVisibility, Role
+from app.shared.constants import PageStatus, PageVisibility, Permission
 from app.shared.exceptions import NotFoundError, ValidationFailedError
 
 
@@ -27,7 +27,7 @@ async def get_for_edit(s: AsyncSession, user: User, page_id: uuid.UUID) -> Page:
 
 
 async def list_workspace(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> list[Page]:
-    await policy.require_role(s, user, workspace_id, Role.VIEWER)
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
     return await repo.list_workspace(s, workspace_id, policy.visible_pages_filter(user.id))
 
 
@@ -42,7 +42,7 @@ async def create(
     status: PageStatus = PageStatus.PUBLISHED,
     visibility: PageVisibility = PageVisibility.WORKSPACE,
 ) -> Page:
-    await policy.require_role(s, user, workspace_id, Role.MEMBER)
+    await policy.require_permission(s, user, workspace_id, Permission.WRITE)
     title = title.strip()
     if not title:
         raise ValidationFailedError("Title is required")

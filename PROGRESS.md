@@ -58,7 +58,15 @@ Self-hosted collaborative knowledge base（Obsidian-style `[[links]]` + Notion-s
 - [x] 修：編輯器 seed 時剝除 frontmatter（metadata 由 Info 面板/DB 管理，y_markdown._FRONTMATTER_RE）
 - [x] pytest 22 passed / ruff clean
 
-## 目前狀態：開發完成，未 commit
+### ✅ RBAC 彈性強化（2026-07-03，第二輪）
+- [x] Permission 模型（read/write/manage/own，`shared/constants` + `policy.require_permission` 單一閘道），全部 call sites 從 require_role 改為 require_permission
+- [x] Members API：接受 `access: "read"|"write"`（映射 viewer/member），回傳 `permissions` 陣列
+- [x] 修洩漏：被移出 workspace 後 mentions 收件匣不再顯示該 workspace 的留言內容
+- [x] 前端 Members UI 改用明確權限標籤（Read only / Read & write / Admin）
+- [x] tests/test_rbac.py：非成員 17 個 endpoint 全面 404、read/write 升降級、撤銷後斷存取+mentions
+- [x] pytest 26 passed、npm build 過、docker stack 已 rebuild 並 live 驗證
+
+## 目前狀態：開發完成，未 commit（RBAC 強化）
 
 docker stack 還在跑（http://localhost:8888，demo 帳號 admin@example.com / demo1234）。
 待使用者決定 commit（commit messages 已建議，見對話）。

@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from app.api.schemas.common import ORMModel, UserRef
-from app.shared.constants import Role
+from app.shared.constants import Permission, Role
 
 
 class WorkspaceCreateIn(BaseModel):
@@ -31,13 +31,30 @@ class WorkspaceOut(ORMModel):
     my_role: Role
 
 
+_ACCESS_TO_ROLE = {"read": Role.VIEWER, "write": Role.MEMBER}
+
+
 class MemberAddIn(BaseModel):
+    """Grant access by role, or by plain `access` level ('read' | 'write')."""
+
     email: str
-    role: Role = Role.MEMBER
+    role: Role | None = None
+    access: Literal["read", "write"] | None = None
+
+    def effective_role(self) -> Role:
+        if self.access is not None:
+            return _ACCESS_TO_ROLE[self.access]
+        return self.role or Role.MEMBER
 
 
 class MemberUpdateIn(BaseModel):
-    role: Role
+    role: Role | None = None
+    access: Literal["read", "write"] | None = None
+
+    def effective_role(self) -> Role | None:
+        if self.access is not None:
+            return _ACCESS_TO_ROLE[self.access]
+        return self.role
 
 
 class MemberOut(BaseModel):
@@ -45,6 +62,7 @@ class MemberOut(BaseModel):
     email: str
     name: str
     role: Role
+    permissions: list[Permission]
     joined_at: datetime
 
 

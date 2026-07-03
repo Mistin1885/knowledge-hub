@@ -11,6 +11,21 @@ import { Button, EmptyState, ErrorNote, Input, Select, Spinner } from '../ui/pri
 
 const ASSIGNABLE_ROLES: Role[] = ['viewer', 'member', 'admin'];
 
+// roles are named permission bundles — show them as access levels
+const ROLE_LABELS: Record<Role, string> = {
+  viewer: 'Read only',
+  member: 'Read & write',
+  admin: 'Admin (read/write + manage members)',
+  owner: 'Owner',
+};
+
+const ROLE_BADGES: Record<Role, string> = {
+  viewer: 'Read only',
+  member: 'Read & write',
+  admin: 'Admin',
+  owner: 'Owner',
+};
+
 export default function MembersTab({ workspace, user }: { workspace: Workspace; user: User }) {
   const membersQ = useMembers(workspace.id);
   const addMember = useAddMember(workspace.id);
@@ -63,7 +78,7 @@ export default function MembersTab({ workspace, user }: { workspace: Workspace; 
           <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ASSIGNABLE_ROLES.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {ROLE_LABELS[r]}
               </option>
             ))}
           </Select>
@@ -110,13 +125,13 @@ export default function MembersTab({ workspace, user }: { workspace: Workspace; 
                 >
                   {ASSIGNABLE_ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {r}
+                      {ROLE_LABELS[r]}
                     </option>
                   ))}
                 </Select>
               ) : (
-                <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs capitalize text-neutral-600">
-                  {member.role}
+                <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+                  {ROLE_BADGES[member.role]}
                 </span>
               )}
               {(canManage || (isSelf && member.role !== 'owner')) && (
