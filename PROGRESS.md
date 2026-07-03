@@ -66,7 +66,14 @@ Self-hosted collaborative knowledge base（Obsidian-style `[[links]]` + Notion-s
 - [x] tests/test_rbac.py：非成員 17 個 endpoint 全面 404、read/write 升降級、撤銷後斷存取+mentions
 - [x] pytest 26 passed、npm build 過、docker stack 已 rebuild 並 live 驗證
 
-## 目前狀態：開發完成，未 commit（RBAC 強化）
+### ✅ Folder 功能 + 重複 header 修復（2026-07-03，第三輪）
+- [x] **修 bug**：切換頁面時 PageHeader 重複堆疊 — root cause 是 `PageHeader` 與 `CollabEditor` siblings 用相同 `key={page.id}`（React 重複 key 導致 reconciliation 殘留 DOM），改為 `header:${id}` / `editor:${id}`，Playwright 8 次導航驗證只剩 1 個
+- [x] Sidebar「+」改成 dropdown（New page / New folder），tree context menu 加 New subfolder
+- [x] **FolderView**（Notion-style）：folder 頁不再開 collab editor，改為（1）folder notes 區（存 folder 的 content_md，debounced PATCH）（2）子頁 preview 卡片列表（`GET /pages/{id}/children`，含 plain-text preview、status、連結）（3）每個子頁的行內註解（存子頁 `metadata.note`）+（4）底部 comments — 四種粒度的註解
+- [x] 後端 children endpoint（visibility 過濾、preview 剝除標題行/同名 H1）+ 測試
+- [x] pytest 27 passed、tsc clean、docker stack 已 rebuild、Playwright folder e2e 全過（建立→notes→子頁→註解→reload 持久化）
+
+## 目前狀態：開發完成，未 commit（folder + dup fix）
 
 docker stack 還在跑（http://localhost:8888，demo 帳號 admin@example.com / demo1234）。
 待使用者決定 commit（commit messages 已建議，見對話）。

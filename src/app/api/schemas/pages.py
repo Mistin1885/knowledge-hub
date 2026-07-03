@@ -59,6 +59,11 @@ class PageDetailOut(PageOut):
     outgoing_count: int
 
 
+class ChildPageOut(BaseModel):
+    page: PageOut
+    preview: str
+
+
 class VersionOut(ORMModel):
     id: uuid.UUID
     version: int

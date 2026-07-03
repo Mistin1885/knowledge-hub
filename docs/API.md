@@ -50,6 +50,7 @@ status ∈ draft|published|archived   visibility ∈ workspace|private
 - `GET /workspaces/{wid}/pages` → flat `[page]` (client builds tree from parent_id+position)
 - `POST /workspaces/{wid}/pages` `{title, parent_id?, content_md?, is_folder?, status?, visibility?, tags?, metadata?}` → `201 {pageDetail}`
 - `GET /pages/{id}` → `{pageDetail}`
+- `GET /pages/{id}/children` → `[{page, preview}]` — direct children ordered by position, with a plain-text content preview (folder view); per-item annotations live in the child's `metadata.note`
 - `PATCH /pages/{id}` any of `{title, content_md, parent_id, position, icon, status, visibility, tags, metadata, owner_id}` → `{pageDetail}`. Content patch returns `409` if a live collab session is active.
 - `DELETE /pages/{id}` → `204` (recursive; requires member+)
 - `GET /pages/{id}/versions` → `[{id, version, title, created_by: {id,name}, created_at, summary}]`

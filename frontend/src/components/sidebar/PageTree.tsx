@@ -49,9 +49,9 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
   };
 
   const actions: TreeActions = {
-    onNewSubpage: (parent) => {
+    onNewSubpage: (parent, isFolder) => {
       createPage.mutate(
-        { title: 'Untitled', parent_id: parent.id },
+        { title: isFolder ? 'New folder' : 'Untitled', parent_id: parent.id, is_folder: isFolder },
         {
           onSuccess: (page) => {
             setExpanded((prev) => new Set(prev).add(parent.id));

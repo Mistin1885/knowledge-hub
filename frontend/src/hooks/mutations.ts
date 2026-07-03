@@ -27,6 +27,7 @@ export function useCreatePage(workspaceId: string) {
       qc.setQueryData(['page', page.id], page);
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
+      qc.invalidateQueries({ queryKey: ['children'] });
     },
   });
 }
@@ -39,6 +40,7 @@ export function useUpdatePage(pageId: string, workspaceId: string) {
       qc.setQueryData(['page', pageId], page);
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
+      qc.invalidateQueries({ queryKey: ['children'] });
     },
   });
 }
@@ -50,6 +52,7 @@ export function useDeletePage(workspaceId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
+      qc.invalidateQueries({ queryKey: ['children'] });
     },
   });
 }

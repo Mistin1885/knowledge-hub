@@ -31,6 +31,22 @@ async def list_workspace(s: AsyncSession, user: User, workspace_id: uuid.UUID) -
     return await repo.list_workspace(s, workspace_id, policy.visible_pages_filter(user.id))
 
 
+def content_preview(page: Page, max_chars: int = 240) -> str:
+    """First lines of the page's plain text (search_text minus the title line
+    and a leading H1 that just repeats the title)."""
+    text = page.search_text or ""
+    lines = text.split("\n")[1:]  # first line is the title
+    while lines and lines[0].strip() in ("", page.title.strip()):
+        lines.pop(0)
+    body = " ".join(" ".join(lines).split())
+    return body[:max_chars] + ("…" if len(body) > max_chars else "")
+
+
+async def list_children(s: AsyncSession, user: User, page_id: uuid.UUID) -> list[Page]:
+    await get_for_read(s, user, page_id)
+    return await repo.list_children(s, page_id, policy.visible_pages_filter(user.id))
+
+
 async def create(
     s: AsyncSession,
     user: User,

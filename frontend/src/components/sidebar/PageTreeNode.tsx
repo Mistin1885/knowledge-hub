@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  FolderPlus,
 } from 'lucide-react';
 import type { Page } from '../../api/types';
 import type { PageTreeNode as TreeNode } from '../../lib/tree';
@@ -17,7 +18,7 @@ import { cn } from '../../lib/utils';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 
 export interface TreeActions {
-  onNewSubpage: (page: Page) => void;
+  onNewSubpage: (page: Page, isFolder: boolean) => void;
   onRename: (page: Page) => void;
   onDelete: (page: Page) => void;
   onToggleFolder: (page: Page) => void;
@@ -102,7 +103,15 @@ export default function PageTreeNode({
                     label="New subpage"
                     onClick={() => {
                       close();
-                      actions.onNewSubpage(page);
+                      actions.onNewSubpage(page, false);
+                    }}
+                  />
+                  <MenuItem
+                    icon={<FolderPlus size={13} />}
+                    label="New subfolder"
+                    onClick={() => {
+                      close();
+                      actions.onNewSubpage(page, true);
                     }}
                   />
                   <MenuItem

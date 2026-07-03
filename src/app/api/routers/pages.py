@@ -5,6 +5,7 @@ from fastapi import APIRouter, status
 from app.api import serializers
 from app.api.deps import DB, CurrentUser
 from app.api.schemas.pages import (
+    ChildPageOut,
     MetadataKeyOut,
     PageCreateIn,
     PageDetailOut,
@@ -44,6 +45,18 @@ async def create_page(workspace_id: uuid.UUID, body: PageCreateIn, user: Current
         tags=body.tags, metadata=body.metadata,
     )
     return await serializers.page_detail_out(s, page)
+
+
+@router.get("/pages/{page_id}/children", response_model=list[ChildPageOut])
+async def list_children(page_id: uuid.UUID, user: CurrentUser, s: DB):
+    children = await pages_service.list_children(s, user, page_id)
+    return [
+        ChildPageOut(
+            page=await serializers.page_out(s, child),
+            preview=pages_service.content_preview(child),
+        )
+        for child in children
+    ]
 
 
 @router.get("/pages/{page_id}", response_model=PageDetailOut)

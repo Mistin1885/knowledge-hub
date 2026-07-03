@@ -31,6 +31,13 @@ export function usePage(pageId: string | undefined) {
   });
 }
 
+export function useChildren(pageId: string) {
+  return useQuery({
+    queryKey: ['children', pageId],
+    queryFn: () => pageApi.children(pageId),
+  });
+}
+
 export function useTags(workspaceId: string | undefined) {
   return useQuery({
     queryKey: ['tags', workspaceId],

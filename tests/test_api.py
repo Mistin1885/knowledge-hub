@@ -228,3 +228,48 @@ async def test_api_token_auth(client, alice):
         headers={"Authorization": f"Bearer {token}"},
     ) as agent_client:
         assert (await agent_client.get("/api/v1/auth/me")).status_code == 401
+
+
+async def test_folder_children_with_preview(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    folder = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages", json={"title": "Specs", "is_folder": True}
+        )
+    ).json()
+    await client.post(
+        f"/api/v1/workspaces/{wid}/pages",
+        json={
+            "title": "Login API",
+            "parent_id": folder["id"],
+            "content_md": "# Login API\n\n使用 cookie session 進行認證，詳見規格。",
+            "metadata": {"note": "reviewed by alice"},
+        },
+    )
+    # private child of another member must not appear for alice
+    await register_and_login(client, "other@test.com", "Other")
+    await client.post(
+        "/api/v1/auth/login", json={"email": "alice@test.com", "password": "password123"}
+    )
+    await client.post(
+        f"/api/v1/workspaces/{wid}/members", json={"email": "other@test.com", "access": "write"}
+    )
+    await client.post(
+        "/api/v1/auth/login", json={"email": "other@test.com", "password": "password123"}
+    )
+    await client.post(
+        f"/api/v1/workspaces/{wid}/pages",
+        json={"title": "Other's secret", "parent_id": folder["id"], "visibility": "private"},
+    )
+    await client.post(
+        "/api/v1/auth/login", json={"email": "alice@test.com", "password": "password123"}
+    )
+
+    children = (await client.get(f"/api/v1/pages/{folder['id']}/children")).json()
+    titles = [c["page"]["title"] for c in children]
+    assert "Login API" in titles and "Other's secret" not in titles
+    login_api = next(c for c in children if c["page"]["title"] == "Login API")
+    assert "cookie session" in login_api["preview"]
+    assert "Login API" not in login_api["preview"]  # title line stripped
+    assert login_api["page"]["metadata"]["note"] == "reviewed by alice"

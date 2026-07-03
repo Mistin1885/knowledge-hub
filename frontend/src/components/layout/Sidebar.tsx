@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { FileText, Folder, Plus, Search } from 'lucide-react';
 import type { Workspace } from '../../api/types';
 import { useCreatePage } from '../../hooks/mutations';
+import { Dropdown, MenuItem } from '../ui/Dropdown';
 import { Input } from '../ui/primitives';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import PageTree from '../sidebar/PageTree';
@@ -25,9 +26,9 @@ export default function Sidebar({
     navigate(`/w/${workspace.slug}/search?q=${encodeURIComponent(query)}`);
   };
 
-  const newPage = () => {
+  const newPage = (isFolder: boolean) => {
     createPage.mutate(
-      { title: 'Untitled' },
+      { title: isFolder ? 'New folder' : 'Untitled', is_folder: isFolder },
       { onSuccess: (page) => navigate(`/w/${workspace.slug}/p/${page.id}`) },
     );
   };
@@ -52,14 +53,40 @@ export default function Sidebar({
             Pages
           </span>
           {canEdit && (
-            <button
-              onClick={newPage}
-              disabled={createPage.isPending}
-              title="New page"
-              className="rounded p-1 text-neutral-400 transition-colors duration-150 hover:bg-neutral-100 hover:text-neutral-700"
+            <Dropdown
+              width="w-40"
+              align="right"
+              button={
+                <button
+                  disabled={createPage.isPending}
+                  title="New page or folder"
+                  className="rounded p-1 text-neutral-400 transition-colors duration-150 hover:bg-neutral-100 hover:text-neutral-700"
+                >
+                  <Plus size={14} />
+                </button>
+              }
             >
-              <Plus size={14} />
-            </button>
+              {(close) => (
+                <>
+                  <MenuItem
+                    icon={<FileText size={13} />}
+                    label="New page"
+                    onClick={() => {
+                      close();
+                      newPage(false);
+                    }}
+                  />
+                  <MenuItem
+                    icon={<Folder size={13} />}
+                    label="New folder"
+                    onClick={() => {
+                      close();
+                      newPage(true);
+                    }}
+                  />
+                </>
+              )}
+            </Dropdown>
           )}
         </div>
         <PageTree workspace={workspace} />

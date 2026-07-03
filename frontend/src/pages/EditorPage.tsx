@@ -9,6 +9,7 @@ import { useUpdatePage } from '../hooks/mutations';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { cn } from '../lib/utils';
 import CollabEditor from '../components/editor/CollabEditor';
+import FolderView from '../components/folder/FolderView';
 import CommentsSection from '../components/comments/CommentsSection';
 import RightSidebar from '../components/rightbar/RightSidebar';
 import { Dropdown } from '../components/ui/Dropdown';
@@ -146,15 +147,25 @@ export default function EditorPage() {
     <div className="flex h-full min-h-0">
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-8 py-8">
-          <PageHeader key={page.id} page={page} canEdit={canEdit} />
-          <CollabEditor
-            key={page.id}
-            pageId={page.id}
-            workspace={workspace}
-            user={user}
-            pages={pagesQ.data ?? []}
-            editable={canEdit}
-          />
+          {/* sibling keys must be unique — sharing page.id corrupts reconciliation */}
+          <PageHeader key={`header:${page.id}`} page={page} canEdit={canEdit} />
+          {page.is_folder ? (
+            <FolderView
+              key={`folder:${page.id}`}
+              page={page}
+              workspace={workspace}
+              canEdit={canEdit}
+            />
+          ) : (
+            <CollabEditor
+              key={`editor:${page.id}`}
+              pageId={page.id}
+              workspace={workspace}
+              user={user}
+              pages={pagesQ.data ?? []}
+              editable={canEdit}
+            />
+          )}
           <CommentsSection pageId={page.id} user={user} canComment={canEdit} />
         </div>
       </div>

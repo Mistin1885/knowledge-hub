@@ -88,6 +88,11 @@ export const workspaceApi = {
     http.get<SearchResponse>(`/workspaces/${id}/search?${searchQueryString(params)}`),
 };
 
+export interface ChildPage {
+  page: Page;
+  preview: string;
+}
+
 export interface CreatePageInput {
   title: string;
   parent_id?: string;
@@ -116,6 +121,7 @@ export interface UpdatePageInput {
 }
 
 export const pageApi = {
+  children: (id: string) => http.get<ChildPage[]>(`/pages/${id}/children`),
   create: (workspaceId: string, data: CreatePageInput) =>
     http.post<PageDetail>(`/workspaces/${workspaceId}/pages`, data),
   get: (id: string) => http.get<PageDetail>(`/pages/${id}`),

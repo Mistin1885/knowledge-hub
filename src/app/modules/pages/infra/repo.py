@@ -38,6 +38,19 @@ async def children_count(s: AsyncSession, page_id: uuid.UUID) -> int:
     return (await s.scalar(select(func.count()).where(Page.parent_id == page_id))) or 0
 
 
+async def list_children(
+    s: AsyncSession, page_id: uuid.UUID, visibility_filter
+) -> list[Page]:
+    return list(
+        await s.scalars(
+            select(Page)
+            .options(joinedload(Page.owner))
+            .where(Page.parent_id == page_id, visibility_filter)
+            .order_by(Page.position, Page.created_at)
+        )
+    )
+
+
 async def max_sibling_position(s: AsyncSession, workspace_id: uuid.UUID, parent_id: uuid.UUID | None) -> float:
     q = select(func.max(Page.position)).where(Page.workspace_id == workspace_id)
     q = q.where(Page.parent_id == parent_id) if parent_id else q.where(Page.parent_id.is_(None))
