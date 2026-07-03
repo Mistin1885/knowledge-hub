@@ -1,0 +1,40 @@
+# VCS and local metadata
+.git/
+.gitignore
+.dockerignore
+.claude/
+
+# Secrets/local env
+.env
+.env.*
+!.env.example
+
+# Python caches/build outputs
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+wheels/
+*.egg-info/
+.venv/
+venv/
+
+# Frontend dependencies/build outputs
+**/node_modules/
+**/dist/
+
+# Runtime data and generated artifacts
+data/
+output/
+models/
+
+# Misc local files
+.DS_Store
+.idea/
+.vscode/

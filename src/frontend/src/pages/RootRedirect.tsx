@@ -33,7 +33,7 @@ export default function RootRedirect() {
   return (
     <Centered>
       <div className="text-center">
-        <h1 className="text-base font-semibold text-neutral-900">Welcome to Knowledge Map</h1>
+        <h1 className="text-base font-semibold text-neutral-900">Welcome to Knowledge Hub</h1>
         <p className="mt-1 text-[13px] text-neutral-500">
           You are not a member of any workspace yet.
         </p>

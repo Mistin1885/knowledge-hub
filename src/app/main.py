@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Knowledge Map", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Knowledge Hub", version="1.0.0", lifespan=lifespan)
 
 
 @app.exception_handler(AppError)

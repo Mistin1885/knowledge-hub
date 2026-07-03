@@ -24,7 +24,7 @@ from app.modules.workspaces.services import workspaces as ws_service
 from app.shared.exceptions import AppError, UnauthenticatedError
 
 mcp = FastMCP(
-    "knowledge-map",
+    "knowledge-hub",
     instructions=(
         "Company knowledge base. Use search_pages/ask to find information, "
         "get_page to read a document, get_backlinks/get_related_pages to explore "

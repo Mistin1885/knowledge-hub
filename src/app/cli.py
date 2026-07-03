@@ -12,7 +12,7 @@ from app.modules.pages.cli import app as pages_cli
 from app.modules.search.cli import app as search_cli
 from app.modules.workspaces.cli import app as workspaces_cli
 
-app = typer.Typer(help="Knowledge Map operations")
+app = typer.Typer(help="Knowledge Hub operations")
 app.add_typer(identity_cli, name="identity")
 app.add_typer(workspaces_cli, name="workspaces")
 app.add_typer(pages_cli, name="pages")

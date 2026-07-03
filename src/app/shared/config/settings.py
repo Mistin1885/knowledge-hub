@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Storage
     uploads_dir: Path = Path("data/uploads")
     max_upload_mb: int = 50
-    frontend_dist: Path = Path("frontend/dist")
+    frontend_dist: Path = Path("src/frontend/dist")
 
     # Embeddings (any OpenAI-compatible endpoint); semantic search is disabled when unset
     embeddings_base_url: str | None = None

@@ -53,8 +53,8 @@ Self-hosted collaborative knowledge base（Obsidian-style `[[links]]` + Notion-s
 - [x] 已修 bugs：boolean cast→case()、/mcp 尾斜線 405、search CJK、pkill 自殺（用 $SP/restart.sh PID file 管理 dev server，port **8600**，8000 被別的服務佔用）
 
 ### ✅ 全部完成（2026-07-03）
-- [x] Dockerfile（multi-stage npm→python，注意要 COPY README.md 否則 hatchling 炸）+ docker-compose.yml（pgvector db + app，KM_PORT 預設 8080）+ .env.example + README + .gitignore
-- [x] **docker compose 全流程驗證通過**（host port 8888，8080 也被佔）：seed → collab e2e（雙 client）→ Playwright UI e2e（登入→tree→編輯器 Yjs 同步→打字含 wikilink→snapshot→backlink→graph→search，截圖在 scratchpad）
+- [x] deploy/Dockerfile（multi-stage npm→python，注意要 COPY README.md 否則 hatchling 炸）+ deploy/docker-compose.yml（pgvector db + app，KM_PORT 預設 8080）+ .env.example + README + .gitignore
+- [x] **docker compose（deploy/docker-compose.yml）全流程驗證通過**（host port 8888，8080 也被佔）：seed → collab e2e（雙 client）→ Playwright UI e2e（登入→tree→編輯器 Yjs 同步→打字含 wikilink→snapshot→backlink→graph→search，截圖在 scratchpad）
 - [x] 修：編輯器 seed 時剝除 frontmatter（metadata 由 Info 面板/DB 管理，y_markdown._FRONTMATTER_RE）
 - [x] pytest 22 passed / ruff clean
 
@@ -90,7 +90,7 @@ attachment 圖片直接貼上、通知 email、SSO/OIDC、graph 篩選器。
 docker start km-dev-pg                  # dev DB (port 5433)
 uv run alembic upgrade head             # schema
 uv run uvicorn app.main:app --reload    # 後端（完成 main.py 後）
-cd frontend && npm run dev              # 前端 dev server (5173, proxy→8000)
+cd src/frontend && npm run dev              # 前端 dev server (5173, proxy→8000)
 ```
 
 ## 已知風險/注意

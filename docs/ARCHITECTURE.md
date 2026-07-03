@@ -1,4 +1,4 @@
-# Knowledge Map — Architecture
+# Knowledge Hub — Architecture
 
 Self-hosted collaborative knowledge base: Obsidian-style linking + Notion-style
 collaboration + AI-agent access via MCP.
@@ -74,6 +74,15 @@ explicit `page_shares` rows. All checks centralized in
 
 ## Deployment
 
-`docker compose up`: `db` (postgres+pgvector), `app` (uvicorn, serves API +
-built frontend), `mcp` profile (same image, MCP entrypoint). Attachments on a
-volume under `data/uploads`. Single origin — no CORS in production.
+Deployment files live in `deploy/`. From the repo root run:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
+```
+
+The compose stack starts `db` (PostgreSQL + pgvector) and `app` (uvicorn, API,
+MCP endpoint, and built frontend). User-created system data is bind-mounted to
+real host paths by default: `data/postgres/` stores pages, folders, comments,
+users, workspaces, and search indexes; `data/uploads/` stores attachments. This
+keeps data across service restarts and container recreates. Single origin — no
+CORS in production.

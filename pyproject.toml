@@ -1,5 +1,5 @@
 [project]
-name = "knowledge-map"
+name = "knowledge-hub"
 version = "0.1.0"
 description = "Self-hosted collaborative knowledge base with Obsidian-style linking, realtime collaboration, and MCP access"
 readme = "README.md"

@@ -13,12 +13,12 @@ from app.shared.constants import Role
 
 PAGES = [
     ("產品總覽", None, """---
-project: knowledge-map
+project: knowledge-hub
 status_note: living document
 ---
 # 產品總覽
 
-Knowledge Map 是公司內部的知識管理平台。相關文件：
+Knowledge Hub 是公司內部的知識管理平台。相關文件：
 
 - 系統架構請見 [[系統架構]]
 - API 規格請見 [[API 設計]]
@@ -29,7 +29,7 @@ Knowledge Map 是公司內部的知識管理平台。相關文件：
 讓專案文件、技術決策、會議紀錄可以互相連結、全文搜尋，並讓 AI agent 透過 MCP 查詢。
 """, ["overview", "product"]),
     ("系統架構", None, """---
-project: knowledge-map
+project: knowledge-hub
 system: backend
 ---
 # 系統架構
@@ -43,7 +43,7 @@ system: backend
 - 搜尋（全文 + 向量），設計討論在 [[搜尋設計討論]]
 """, ["architecture", "backend"]),
     ("API 設計", None, """---
-project: knowledge-map
+project: knowledge-hub
 system: backend
 owner_note: API guild
 ---
@@ -56,13 +56,13 @@ REST API 遵循資源導向設計，參考 [[系統架構]]。
 Cookie session 給瀏覽器、Bearer token 給 agent。部署相關注意事項見 [[部署 SOP]]。
 """, ["api", "backend"]),
     ("部署 SOP", None, """---
-project: knowledge-map
+project: knowledge-hub
 system: infra
 ---
 # 部署 SOP
 
-1. `docker compose build`
-2. `docker compose up -d`
+1. `docker compose --env-file .env -f deploy/docker-compose.yml build`
+2. `docker compose --env-file .env -f deploy/docker-compose.yml up -d`
 3. 確認 `/healthz`
 
 架構背景請讀 [[系統架構]]。
