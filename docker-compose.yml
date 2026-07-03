@@ -1,0 +1,36 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: km
+      POSTGRES_PASSWORD: ${KM_DB_PASSWORD:?Set KM_DB_PASSWORD in .env}
+      POSTGRES_DB: km
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U km"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      KM_DATABASE_URL: postgresql+asyncpg://km:${KM_DB_PASSWORD:?Set KM_DB_PASSWORD in .env}@db:5432/km
+      # optional semantic search — point at any OpenAI-compatible endpoint:
+      KM_EMBEDDINGS_BASE_URL: ${KM_EMBEDDINGS_BASE_URL:-}
+      KM_EMBEDDINGS_API_KEY: ${KM_EMBEDDINGS_API_KEY:-}
+      KM_EMBEDDINGS_MODEL: ${KM_EMBEDDINGS_MODEL:-text-embedding-3-small}
+      KM_REGISTRATION_OPEN: ${KM_REGISTRATION_OPEN:-true}
+      KM_COOKIE_SECURE: ${KM_COOKIE_SECURE:-false}
+    volumes:
+      - uploads:/srv/km/data/uploads
+    ports:
+      - "${KM_PORT:-8080}:8000"
+
+volumes:
+  db-data:
+  uploads:
