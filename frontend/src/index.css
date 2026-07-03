@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-[#fafaf9] text-[13.5px] text-neutral-900 antialiased;
+}
+
+/* ---------- Editor content typography ---------- */
+
+.km-editor .ProseMirror {
+  @apply min-h-[40vh] text-[16px] leading-7 text-neutral-800 outline-none;
+}
+
+.km-editor .ProseMirror > * + * {
+  margin-top: 0.625rem;
+}
+
+.km-editor .ProseMirror h1 {
+  @apply mb-1 mt-8 text-3xl font-semibold tracking-tight text-neutral-900;
+}
+
+.km-editor .ProseMirror h2 {
+  @apply mb-1 mt-7 text-2xl font-semibold tracking-tight text-neutral-900;
+}
+
+.km-editor .ProseMirror h3 {
+  @apply mb-1 mt-6 text-xl font-semibold text-neutral-900;
+}
+
+.km-editor .ProseMirror h4,
+.km-editor .ProseMirror h5,
+.km-editor .ProseMirror h6 {
+  @apply mb-1 mt-5 text-base font-semibold text-neutral-900;
+}
+
+.km-editor .ProseMirror code {
+  @apply rounded bg-neutral-100 px-1 py-0.5 font-mono text-[13px] text-neutral-800;
+}
+
+.km-editor .ProseMirror pre {
+  @apply overflow-x-auto rounded-md border border-neutral-200 bg-neutral-100 p-3 font-mono text-[13px] leading-6;
+}
+
+.km-editor .ProseMirror pre code {
+  @apply bg-transparent p-0;
+}
+
+.km-editor .ProseMirror blockquote {
+  @apply border-l-2 border-indigo-300 pl-4 text-neutral-600;
+}
+
+.km-editor .ProseMirror ul {
+  @apply list-disc pl-6;
+}
+
+.km-editor .ProseMirror ol {
+  @apply list-decimal pl-6;
+}
+
+.km-editor .ProseMirror li > p {
+  margin: 0;
+}
+
+.km-editor .ProseMirror ul[data-type='taskList'] {
+  @apply list-none pl-1;
+}
+
+.km-editor .ProseMirror ul[data-type='taskList'] li {
+  @apply flex items-start gap-2;
+}
+
+.km-editor .ProseMirror ul[data-type='taskList'] li > label {
+  @apply mt-[7px] flex-none;
+}
+
+.km-editor .ProseMirror ul[data-type='taskList'] li > div {
+  @apply min-w-0 flex-1;
+}
+
+.km-editor .ProseMirror ul[data-type='taskList'] input[type='checkbox'] {
+  @apply h-3.5 w-3.5 accent-indigo-600;
+}
+
+.km-editor .ProseMirror li[data-checked='true'] > div {
+  @apply text-neutral-400 line-through;
+}
+
+.km-editor .ProseMirror img {
+  @apply max-w-full rounded-md border border-neutral-200;
+}
+
+.km-editor .ProseMirror a {
+  @apply text-indigo-600 underline decoration-indigo-300 underline-offset-2;
+}
+
+.km-editor .ProseMirror hr {
+  @apply my-6 border-neutral-200;
+}
+
+.km-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none float-left h-0 text-neutral-400;
+}
+
+/* ---------- Wikilink decorations ---------- */
+
+.km-editor .wikilink {
+  @apply cursor-pointer rounded bg-indigo-50 px-0.5 text-indigo-600 transition-colors duration-150;
+}
+
+.km-editor .wikilink:hover {
+  @apply bg-indigo-100;
+}
+
+/* ---------- Collaboration cursors ---------- */
+
+.collaboration-cursor__caret {
+  border-left: 1px solid;
+  border-right: 1px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+
+.collaboration-cursor__label {
+  @apply absolute left-[-1px] top-[-1.4em] select-none whitespace-nowrap rounded-sm rounded-bl-none px-1 py-px text-[10px] font-semibold text-white;
+  pointer-events: none;
+}
