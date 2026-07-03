@@ -5,83 +5,118 @@ import { CopyPlus, GripVertical, Trash2 } from 'lucide-react';
 import { MenuItem } from '../ui/Dropdown';
 
 interface HandleState {
-  pos: number; // document position of the top-level block
+  pos: number; // document position of the draggable node
   top: number; // relative to the km-editor wrapper
   left: number;
 }
 
-/** Notion-style per-block drag handle: hover a block to reveal it, drag to
- *  reorder (ProseMirror moves the node), click for delete/duplicate. */
+const LIST_ITEMS = new Set(['listItem', 'taskItem']);
+
+/** Resolve the draggable node under `target`: an individual list item when
+ *  hovering one (Notion drags bullets, not the whole list), otherwise the
+ *  top-level block. Returns its doc position or null. */
+function findBlock(editor: Editor, target: HTMLElement): { pos: number; dom: HTMLElement } | null {
+  const dom = target.closest('li, .ProseMirror > *') as HTMLElement | null;
+  if (!dom) return null;
+  const view = editor.view;
+  try {
+    const inside = view.posAtDOM(dom, 0);
+    const $pos = view.state.doc.resolve(inside);
+    if (dom.tagName === 'LI') {
+      for (let d = $pos.depth; d > 0; d--) {
+        if (LIST_ITEMS.has($pos.node(d).type.name)) {
+          return { pos: $pos.before(d), dom };
+        }
+      }
+      return null;
+    }
+    const pos = $pos.depth > 0 ? $pos.before(1) : inside;
+    return view.state.doc.nodeAt(pos) ? { pos, dom } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Notion-style per-block drag handle: hover a block (or list item) to reveal
+ *  it, drag to reorder — ProseMirror relocates the node — click for
+ *  delete/duplicate. */
 export default function BlockDragHandle({ editor }: { editor: Editor }) {
   const [handle, setHandle] = useState<HandleState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const handleRef = useRef<HandleState | null>(null);
+  handleRef.current = handle;
+  const draggingRef = useRef(false);
   const raf = useRef(0);
 
   useEffect(() => {
-    const wrapper = rootRef.current?.parentElement; // the .km-editor wrapper
-    if (!wrapper) return;
-
-    const locate = (target: HTMLElement): HandleState | null => {
-      const blockEl = target.closest('.ProseMirror > *') as HTMLElement | null;
-      if (!blockEl) return null;
-      const view = editor.view;
-      let pos: number;
-      try {
-        const inside = view.posAtDOM(blockEl, 0);
-        const $pos = view.state.doc.resolve(inside);
-        pos = $pos.depth > 0 ? $pos.before(1) : inside;
-      } catch {
-        return null;
-      }
-      if (!view.state.doc.nodeAt(pos)) return null;
-      const blockRect = blockEl.getBoundingClientRect();
-      const wrapRect = wrapper.getBoundingClientRect();
-      return {
-        pos,
-        top: blockRect.top - wrapRect.top + 2,
-        left: blockRect.left - wrapRect.left - 28,
-      };
+    const hide = () => {
+      setHandle((prev) => (prev ? null : prev));
+      setMenuOpen(false);
     };
 
     const onMove = (e: MouseEvent) => {
+      if (draggingRef.current) return;
       const target = e.target as HTMLElement;
-      if (rootRef.current?.contains(target)) return; // hovering the handle itself
+      if (rootRef.current?.contains(target)) return; // hovering the handle/menu
+      const wrapper = editor.view.dom.closest('.km-editor');
+      if (!wrapper || !wrapper.contains(target)) {
+        // The handle floats in the gutter left of the wrapper — keep it while
+        // the cursor travels there, so reaching it isn't a race.
+        const cur = handleRef.current;
+        if (cur && wrapper) {
+          const r = wrapper.getBoundingClientRect();
+          const y = e.clientY - r.top;
+          const inGutter =
+            e.clientX >= r.left - 56 &&
+            e.clientX <= r.left + 4 &&
+            y >= cur.top - 16 &&
+            y <= cur.top + 40;
+          if (inGutter) return;
+        }
+        hide();
+        return;
+      }
       cancelAnimationFrame(raf.current);
       raf.current = requestAnimationFrame(() => {
-        const next = locate(target);
-        if (next) {
-          setHandle((prev) => {
-            if (prev?.pos !== next.pos) setMenuOpen(false);
-            return next;
-          });
-        }
+        const found = findBlock(editor, target);
+        if (!found) return;
+        const wrapRect = wrapper.getBoundingClientRect();
+        const rect = found.dom.getBoundingClientRect();
+        setHandle((prev) => {
+          if (prev?.pos !== found.pos) setMenuOpen(false);
+          return {
+            pos: found.pos,
+            top: rect.top - wrapRect.top + 2,
+            left: rect.left - wrapRect.left - 26,
+          };
+        });
       });
     };
-    const onLeave = () => {
-      cancelAnimationFrame(raf.current);
-      setHandle(null);
-      setMenuOpen(false);
+
+    // Any edit invalidates the stored block position.
+    const onUpdate = () => {
+      draggingRef.current = false;
+      hide();
     };
 
-    wrapper.addEventListener('mousemove', onMove);
-    wrapper.addEventListener('mouseleave', onLeave);
+    // The drop unmounts the handle button before its own dragend can fire
+    // (removed drag sources never get dragend), so reset the flag here or
+    // every later mousemove would be ignored and the grip never reappears.
+    const onDragFinish = () => {
+      draggingRef.current = false;
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('drop', onDragFinish, true);
+    document.addEventListener('dragend', onDragFinish, true);
+    editor.on('update', onUpdate);
     return () => {
       cancelAnimationFrame(raf.current);
-      wrapper.removeEventListener('mousemove', onMove);
-      wrapper.removeEventListener('mouseleave', onLeave);
-    };
-  }, [editor]);
-
-  // Any edit invalidates the stored block position.
-  useEffect(() => {
-    const hide = () => {
-      setHandle(null);
-      setMenuOpen(false);
-    };
-    editor.on('update', hide);
-    return () => {
-      editor.off('update', hide);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('drop', onDragFinish, true);
+      document.removeEventListener('dragend', onDragFinish, true);
+      editor.off('update', onUpdate);
     };
   }, [editor]);
 
@@ -89,7 +124,7 @@ export default function BlockDragHandle({ editor }: { editor: Editor }) {
 
   const selectBlock = (): NodeSelection | null => {
     const view = editor.view;
-    if (handle.pos > view.state.doc.content.size || !view.state.doc.nodeAt(handle.pos)) {
+    if (handle.pos >= view.state.doc.content.size || !view.state.doc.nodeAt(handle.pos)) {
       return null;
     }
     const sel = NodeSelection.create(view.state.doc, handle.pos);
@@ -103,15 +138,21 @@ export default function BlockDragHandle({ editor }: { editor: Editor }) {
       e.preventDefault();
       return;
     }
+    draggingRef.current = true;
     const view = editor.view;
     // Hand ProseMirror the dragged slice as an internal move so the drop
     // relocates the node instead of copying it.
     (view as unknown as { dragging: unknown }).dragging = { slice: sel.content(), move: true };
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', ' ');
     const dom = view.nodeDOM(handle.pos) as HTMLElement | null;
-    e.dataTransfer.setData('text/plain', dom?.textContent ?? ' ');
     if (dom) e.dataTransfer.setDragImage(dom, 0, 0);
     setMenuOpen(false);
+  };
+
+  const onDragEnd = () => {
+    draggingRef.current = false;
+    setHandle(null);
   };
 
   const deleteBlock = () => {
@@ -133,15 +174,17 @@ export default function BlockDragHandle({ editor }: { editor: Editor }) {
   };
 
   return (
+    // Oversized transparent hit area bridges the gap between the text edge
+    // and the handle so the cursor never crosses a "dead zone" that hides it.
     <div
       ref={rootRef}
-      className="absolute z-30"
-      style={{ top: handle.top, left: handle.left }}
+      className="absolute z-30 pb-2 pl-2 pr-1.5 pt-1.5"
+      style={{ top: handle.top - 6, left: handle.left - 8 }}
     >
       <button
         draggable
         onDragStart={onDragStart}
-        onDragEnd={() => setHandle(null)}
+        onDragEnd={onDragEnd}
         onClick={() => {
           selectBlock();
           setMenuOpen((o) => !o);
