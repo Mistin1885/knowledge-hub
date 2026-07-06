@@ -62,9 +62,10 @@ async def search(
 
     # --- keyword leg ---
     if query and mode_used in ("hybrid", "fulltext"):
-        match, rank = repo.fulltext_rank(query)
+        sub, match, rank = repo.fulltext_rank(query)
         q = (
             select(Page, rank)
+            .outerjoin(sub, sub.c.page_id == Page.id)
             .where(Page.workspace_id == workspace_id, match, policy.visible_pages_filter(user.id))
             .order_by(rank.desc())
             .limit(limit * 2)

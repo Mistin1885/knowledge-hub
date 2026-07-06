@@ -6,6 +6,7 @@ from app.modules.collab.domain import protocol
 from app.modules.collab.domain.y_markdown import fragment_to_md, md_to_fragment
 from app.modules.links.domain import parser
 from app.modules.search.domain.chunking import chunk_markdown
+from app.modules.search.domain.sanitize import MAX_TOKEN_CHARS, sanitize_for_search
 from app.shared.constants import LinkKind
 
 
@@ -103,6 +104,29 @@ class TestProtocol:
         ]
         decoded = protocol.decode_awareness_update(protocol.encode_awareness_update(entries))
         assert decoded == entries
+
+
+class TestSanitize:
+    def test_keeps_normal_prose(self):
+        text = "Normal prose with words, punctuation — and 中文內容 mixed in."
+        assert sanitize_for_search(text) == text
+
+    def test_drops_oversized_tokens(self):
+        blob = "A" * (MAX_TOKEN_CHARS + 100)
+        out = sanitize_for_search(f"before {blob} after")
+        assert blob not in out
+        assert "before" in out and "after" in out
+
+    def test_boundary_token_kept(self):
+        token = "B" * MAX_TOKEN_CHARS
+        assert token in sanitize_for_search(f"x {token} y")
+
+    def test_cjk_unaffected(self):
+        text = "部署指南" * 20  # long CJK run but under the token cap
+        assert sanitize_for_search(text) == text
+
+    def test_empty(self):
+        assert sanitize_for_search("") == ""
 
 
 class TestFrontmatterStripping:

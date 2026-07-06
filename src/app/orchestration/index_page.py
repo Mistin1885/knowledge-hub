@@ -12,6 +12,7 @@ from app.modules.links.domain import parser
 from app.modules.links.infra import repo as links_repo
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import pages as pages_service
+from app.modules.search.domain import sanitize
 from app.modules.search.services import indexer
 from app.shared.constants import PageStatus, PageVisibility
 
@@ -21,7 +22,8 @@ async def index_page(s: AsyncSession, page: Page, *, title_changed: bool = False
     tags/metadata, chunks + embeddings. Idempotent."""
     doc = parser.parse_document(page.content_md)
 
-    page.search_text = f"{page.title}\n{doc.plain_text}"
+    plain = sanitize.sanitize_for_search(doc.plain_text)
+    page.search_text = f"{page.title}\n{plain}"[: sanitize.MAX_SEARCH_TEXT_CHARS]
 
     await links_repo.replace_links(s, page, doc.links)
     await links_repo.resolve_pending_links_to(s, page)

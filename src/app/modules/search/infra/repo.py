@@ -43,24 +43,37 @@ async def existing_chunk_embeddings(
     return dict(rows.all())
 
 
-def fulltext_rank(query: str):
-    """(match_filter, rank_expr) combining tsvector FTS and trigram similarity —
-    trigram keeps CJK queries working where tsvector tokenization fails."""
+def chunk_match_subquery(query: str):
+    """Per-page best keyword score over page_chunks: tsvector FTS + trigram
+    similarity — trigram keeps CJK queries working where tsvector tokenization
+    fails. Chunk-level matching sidesteps the 1 MB tsvector limit that a
+    page-level index imposes on huge documents."""
     tsq = func.plainto_tsquery(TS_CONFIG, query)
-    tsv = func.to_tsvector(TS_CONFIG, Page.search_text)
-    similarity = func.similarity(Page.search_text, query)
-    title_hit = Page.title.ilike(f"%{query}%")
-    match = or_(
-        tsv.op("@@")(tsq),
-        Page.search_text.ilike(f"%{query}%"),
-        title_hit,
+    tsv = func.to_tsvector(TS_CONFIG, PageChunk.text)
+    return (
+        select(
+            PageChunk.page_id.label("page_id"),
+            func.max(func.ts_rank(tsv, tsq)).label("fts_rank"),
+            func.max(func.similarity(PageChunk.text, query)).label("trgm_sim"),
+        )
+        .where(or_(tsv.op("@@")(tsq), PageChunk.text.ilike(f"%{query}%")))
+        .group_by(PageChunk.page_id)
+        .subquery()
     )
+
+
+def fulltext_rank(query: str):
+    """(chunk_subquery, match_filter, rank_expr); caller must outerjoin the
+    subquery on Page.id so title-only pages (no chunks) still match."""
+    sub = chunk_match_subquery(query)
+    title_hit = Page.title.ilike(f"%{query}%")
+    match = or_(sub.c.page_id.is_not(None), title_hit)
     rank = (
-        func.coalesce(func.ts_rank(tsv, tsq), 0.0) * literal(2.0)
-        + func.coalesce(similarity, 0.0)
+        func.coalesce(sub.c.fts_rank, 0.0) * literal(2.0)
+        + func.coalesce(sub.c.trgm_sim, 0.0)
         + case((title_hit, literal(1.5)), else_=literal(0.0))
     )
-    return match, rank
+    return sub, match, rank
 
 
 async def semantic_chunks(

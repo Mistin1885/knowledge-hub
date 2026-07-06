@@ -365,3 +365,57 @@ async def test_attachment_upload_roundtrip(client, alice):
     resp = await client.get(att["url"])
     assert resp.status_code == 200
     assert resp.content == png
+
+
+async def test_huge_document_write_and_tail_search(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+
+    # ~2 MB of unique words: a page-level tsvector index would reject this
+    # (>1 MB serialized tsvector); chunk-level FTS must accept it and still
+    # find a term that only appears at the very end of the document
+    body = " ".join(f"unique{i}word" for i in range(200_000))
+    content = f"# Huge\n\n{body}\n\nzebrafinch conclusion here."
+    resp = await client.post(
+        f"/api/v1/workspaces/{wid}/pages",
+        json={"title": "Huge Doc", "content_md": content},
+    )
+    assert resp.status_code == 201, resp.text
+
+    hits = (await client.get(f"/api/v1/workspaces/{wid}/search?q=zebrafinch")).json()
+    assert "Huge Doc" in [r["page"]["title"] for r in hits["results"]]
+
+
+async def test_title_only_page_still_searchable(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Roadmap 2027"})
+
+    hits = (await client.get(f"/api/v1/workspaces/{wid}/search?q=Roadmap")).json()
+    assert "Roadmap 2027" in [r["page"]["title"] for r in hits["results"]]
+
+
+async def test_oversized_token_sanitized_from_preview(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    folder = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages", json={"title": "F", "is_folder": True}
+        )
+    ).json()
+
+    blob = "Zm9vYmFy" * 50  # 400-char whitespace-free run (e.g. pasted base64)
+    resp = await client.post(
+        f"/api/v1/workspaces/{wid}/pages",
+        json={
+            "title": "Blobby",
+            "parent_id": folder["id"],
+            "content_md": f"{blob}\n\nreadable summary text follows the blob.",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    children = (await client.get(f"/api/v1/pages/{folder['id']}/children")).json()
+    preview = next(c["preview"] for c in children if c["page"]["title"] == "Blobby")
+    assert blob[:50] not in preview
+    assert "readable summary text" in preview

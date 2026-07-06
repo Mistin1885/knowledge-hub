@@ -20,6 +20,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -130,11 +131,9 @@ class Page(UUIDPk, Timestamped, Base):
 
     __table_args__ = (
         Index("ix_pages_ws_title_lower", "workspace_id", func.lower(title)),
-        Index(
-            "ix_pages_fts",
-            text("to_tsvector('english'::regconfig, search_text)"),
-            postgresql_using="gin",
-        ),
+        # NOTE: no page-level tsvector index — fulltext matching happens on
+        # page_chunks (ix_page_chunks_fts) so huge documents never hit the
+        # 1 MB tsvector limit. Trigram index below serves unlinked mentions.
         Index(
             "ix_pages_trgm",
             "search_text",
@@ -305,6 +304,12 @@ class PageChunk(UUIDPk, Base):
             "text",
             postgresql_using="gin",
             postgresql_ops={"text": "gin_trgm_ops"},
+        ),
+        # sa_text, not text: the `text` column above shadows sqlalchemy.text here
+        Index(
+            "ix_page_chunks_fts",
+            sa_text("to_tsvector('english'::regconfig, text)"),
+            postgresql_using="gin",
         ),
     )
 
