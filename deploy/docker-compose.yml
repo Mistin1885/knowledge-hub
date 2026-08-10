@@ -34,6 +34,8 @@ services:
       KM_EMBEDDINGS_MODEL: ${KM_EMBEDDINGS_MODEL:-text-embedding-3-small}
       KM_REGISTRATION_OPEN: ${KM_REGISTRATION_OPEN:-true}
       KM_COOKIE_SECURE: ${KM_COOKIE_SECURE:-false}
+      KM_MAX_UPLOAD: ${KM_MAX_UPLOAD:-5G}
+      KM_MAX_UPLOAD_MB: ${KM_MAX_UPLOAD_MB:-5120}
     volumes:
       # Uploaded files/attachments are filesystem data created by users.
       - ${KM_DATA_DIR:-../data}/uploads:/srv/knowledge-hub/data/uploads

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import type { Page, Workspace } from '../../api/types';
 import { usePages } from '../../hooks/queries';
-import { useCreatePage, useDeletePage, useUpdatePage } from '../../hooks/mutations';
+import { useCreatePage, useDeletePage, useUpdatePage, useUploadFiles } from '../../hooks/mutations';
 import { pageApi } from '../../api/endpoints';
 import { useQueryClient } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
 import { ancestorIds, buildPageTree } from '../../lib/tree';
 import { ConfirmDialog, PromptDialog } from '../ui/Modal';
 import { EmptyState, Spinner } from '../ui/primitives';
@@ -25,11 +26,14 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
 
   const createPage = useCreatePage(workspace.id);
   const deletePage = useDeletePage(workspace.id);
+  const uploadFiles = useUploadFiles(workspace.id);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [renaming, setRenaming] = useState<Page | null>(null);
   const [deleting, setDeleting] = useState<Page | null>(null);
   const [rootDragOver, setRootDragOver] = useState(false);
+  const [uploadTarget, setUploadTarget] = useState<Page | null>(null);
 
   const pages = useMemo(() => pagesQ.data ?? [], [pagesQ.data]);
   const tree = useMemo(() => buildPageTree(pages), [pages]);
@@ -98,6 +102,21 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
         })
         .catch(refresh);
     },
+    onChooseFiles: (parent) => {
+      setUploadTarget(parent);
+      uploadInputRef.current?.click();
+    },
+    onFilesDropped: (parent, files) => {
+      if (files.length === 0) return;
+      uploadFiles.mutate(
+        { files, parentId: parent?.id ?? null },
+        {
+          onSuccess: () => {
+            if (parent) setExpanded((prev) => new Set(prev).add(parent.id));
+          },
+        },
+      );
+    },
   };
 
   const canEdit = workspace.my_role !== 'viewer';
@@ -121,23 +140,36 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
       onDragOver={(e) => {
         // Empty space below the rows (and non-folder rows bubble here) moves
         // the page to the top level; folder rows handle their own drop.
-        if (!canEdit || !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+        if (!canEdit) return;
         if ((e.target as HTMLElement).closest('[data-tree-row]')) return;
+        const hasFiles = e.dataTransfer.types.includes('Files');
+        if (!hasFiles && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        e.dataTransfer.dropEffect = hasFiles ? 'copy' : 'move';
         setRootDragOver(true);
       }}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) setRootDragOver(false);
       }}
       onDrop={(e) => {
-        if (!canEdit || !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+        if (!canEdit) return;
         if ((e.target as HTMLElement).closest('[data-tree-row]')) return;
+        const files = Array.from(e.dataTransfer.files ?? []);
+        if (files.length === 0 && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
         e.preventDefault();
         setRootDragOver(false);
-        actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), null);
+        if (files.length) actions.onFilesDropped(null, files);
+        else actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), null);
       }}
     >
+      {uploadFiles.isPending && (
+        <div className="mb-1 flex items-center gap-1.5 px-2 py-1 text-[11px] text-indigo-600">
+          <Loader2 size={12} className="animate-spin" /> Uploading to vault…
+        </div>
+      )}
+      {uploadFiles.isError && (
+        <p className="mb-1 px-2 py-1 text-[11px] text-red-600">File upload failed.</p>
+      )}
       {tree.map((node) => (
         <PageTreeNode
           key={node.page.id}
@@ -155,8 +187,20 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
         className={cnRootDrop(rootDragOver)}
         aria-hidden
       >
-        {rootDragOver ? 'Move to top level' : ''}
+        {rootDragOver ? 'Drop at top level' : ''}
       </div>
+      <input
+        ref={uploadInputRef}
+        type="file"
+        hidden
+        multiple
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) actions.onFilesDropped(uploadTarget, files);
+          e.target.value = '';
+          setUploadTarget(null);
+        }}
+      />
       {renaming && (
         <RenameDialog
           page={renaming}
@@ -166,8 +210,8 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
       )}
       {deleting && (
         <ConfirmDialog
-          title="Delete page"
-          message={`Delete "${deleting.title || 'Untitled'}" and all of its subpages? This cannot be undone.`}
+          title={`Delete ${deleting.node_type === 'file' ? 'file' : 'page'}`}
+          message={`Delete "${deleting.title || 'Untitled'}"${deleting.node_type === 'file' ? '' : ' and all of its children'}? This cannot be undone.`}
           confirmLabel="Delete"
           danger
           busy={deletePage.isPending}

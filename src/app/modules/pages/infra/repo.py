@@ -8,6 +8,7 @@ from app.infra.db.models import (
     Attachment,
     Comment,
     CommentMention,
+    FileAsset,
     Page,
     PageMetadata,
     PageShare,
@@ -315,3 +316,45 @@ async def list_attachments(s: AsyncSession, page_id: uuid.UUID) -> list[Attachme
             select(Attachment).where(Attachment.page_id == page_id).order_by(Attachment.created_at)
         )
     )
+
+
+# --- vault files ---
+
+
+async def get_file_asset(s: AsyncSession, node_id: uuid.UUID) -> FileAsset | None:
+    return await s.get(FileAsset, node_id)
+
+
+async def get_file_asset_by_legacy_id(
+    s: AsyncSession, attachment_id: uuid.UUID
+) -> FileAsset | None:
+    return await s.scalar(
+        select(FileAsset).where(FileAsset.legacy_attachment_id == attachment_id)
+    )
+
+
+async def file_assets_for_nodes(
+    s: AsyncSession, node_ids: list[uuid.UUID]
+) -> list[FileAsset]:
+    if not node_ids:
+        return []
+    return list(await s.scalars(select(FileAsset).where(FileAsset.node_id.in_(node_ids))))
+
+
+async def delete_legacy_attachments(
+    s: AsyncSession, attachment_ids: list[uuid.UUID]
+) -> None:
+    if attachment_ids:
+        await s.execute(delete(Attachment).where(Attachment.id.in_(attachment_ids)))
+
+
+async def list_file_nodes_for_parent(
+    s: AsyncSession, parent_id: uuid.UUID
+) -> list[tuple[Page, FileAsset]]:
+    rows = await s.execute(
+        select(Page, FileAsset)
+        .join(FileAsset, FileAsset.node_id == Page.id)
+        .where(Page.parent_id == parent_id)
+        .order_by(Page.position, Page.created_at)
+    )
+    return list(rows.tuples())

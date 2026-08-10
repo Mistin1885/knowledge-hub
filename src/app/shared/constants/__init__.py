@@ -44,6 +44,14 @@ class PageVisibility(StrEnum):
     PRIVATE = "private"
 
 
+class NodeType(StrEnum):
+    """Kinds of first-class entries shown in the workspace vault tree."""
+
+    MARKDOWN = "markdown"
+    FOLDER = "folder"
+    FILE = "file"
+
+
 class LinkKind(StrEnum):
     WIKI = "wiki"
     MARKDOWN = "md"

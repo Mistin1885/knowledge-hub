@@ -18,7 +18,8 @@ from app.infra.db.models import Page, User
 from app.modules.pages.infra import repo
 from app.modules.pages.services import pages as pages_service
 from app.modules.workspaces.services import policy, workspaces
-from app.shared.constants import Permission
+from app.shared.config.settings import settings
+from app.shared.constants import NodeType, Permission
 
 _FORBIDDEN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -67,8 +68,15 @@ def _write_tree(
     by_parent: dict[uuid.UUID | None, list[Page]],
     prefix: str,
     names: _NameRegistry,
+    assets: dict[uuid.UUID, str],
 ) -> None:
     title = safe_filename(node.title)
+    if node.node_type == NodeType.FILE:
+        arcname = f"{prefix}{names.claim(title)}"
+        disk_path = assets.get(node.id)
+        if disk_path and (settings.uploads_dir / disk_path).is_file():
+            zf.write(settings.uploads_dir / disk_path, arcname)
+        return
     children = by_parent.get(node.id, [])
     if children:
         dirname = names.claim(title)
@@ -77,17 +85,19 @@ def _write_tree(
         if (node.content_md or "").strip() or not node.is_folder:
             zf.writestr(f"{prefix}{dirname}/{inner.claim(title)}.md", node.content_md or "")
         for child in children:
-            _write_tree(zf, child, by_parent, f"{prefix}{dirname}/", inner)
+            _write_tree(zf, child, by_parent, f"{prefix}{dirname}/", inner, assets)
     else:
         zf.writestr(f"{prefix}{names.claim(title)}.md", node.content_md or "")
 
 
-def _zip_pages(roots: list[Page], by_parent: dict[uuid.UUID | None, list[Page]]) -> bytes:
+def _zip_pages(
+    roots: list[Page], by_parent: dict[uuid.UUID | None, list[Page]], assets: dict[uuid.UUID, str]
+) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         names = _NameRegistry()
         for root in roots:
-            _write_tree(zf, root, by_parent, "", names)
+            _write_tree(zf, root, by_parent, "", names, assets)
     return buf.getvalue()
 
 
@@ -102,6 +112,10 @@ async def export_folder(s: AsyncSession, user: User, page_id: uuid.UUID) -> tupl
     folder = await pages_service.get_for_read(s, user, page_id)
     pages = await repo.list_workspace(s, folder.workspace_id, policy.visible_pages_filter(user.id))
     by_parent = _children_map(pages)
+    assets = {
+        asset.node_id: asset.disk_path
+        for asset in await repo.file_assets_for_nodes(s, [page.id for page in pages])
+    }
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -109,7 +123,7 @@ async def export_folder(s: AsyncSession, user: User, page_id: uuid.UUID) -> tupl
         if (folder.content_md or "").strip():
             zf.writestr(f"{names.claim(safe_filename(folder.title))}.md", folder.content_md)
         for child in by_parent.get(folder.id, []):
-            _write_tree(zf, child, by_parent, "", names)
+            _write_tree(zf, child, by_parent, "", names, assets)
     return f"{safe_filename(folder.title)}.zip", buf.getvalue()
 
 
@@ -121,5 +135,9 @@ async def export_workspace(
     workspace, _role = await workspaces.get_for_user(s, user, workspace_id)
     pages = await repo.list_workspace(s, workspace_id, policy.visible_pages_filter(user.id))
     by_parent = _children_map(pages)
-    data = _zip_pages(by_parent.get(None, []), by_parent)
+    assets = {
+        asset.node_id: asset.disk_path
+        for asset in await repo.file_assets_for_nodes(s, [page.id for page in pages])
+    }
+    data = _zip_pages(by_parent.get(None, []), by_parent, assets)
     return f"{safe_filename(workspace.name, fallback='workspace')}.zip", data

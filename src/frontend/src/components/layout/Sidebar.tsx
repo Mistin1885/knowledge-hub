@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { FileText, Folder, FolderUp, FileUp, Loader2, Plus, Search } from 'lucide-react';
 import type { Workspace } from '../../api/types';
-import { useCreatePage } from '../../hooks/mutations';
+import { useCreatePage, useUploadFiles } from '../../hooks/mutations';
 import { importMarkdownFiles } from '../../lib/importMd';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 import { Input } from '../ui/primitives';
@@ -22,10 +22,12 @@ export default function Sidebar({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const createPage = useCreatePage(workspace.id);
+  const uploadFiles = useUploadFiles(workspace.id);
   const canEdit = workspace.my_role !== 'viewer';
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
+  const vaultFileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
 
@@ -80,7 +82,7 @@ export default function Sidebar({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         <div className="mb-1 flex items-center justify-between px-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-            Pages
+            Vault
           </span>
           {canEdit && (
             <Dropdown
@@ -117,6 +119,14 @@ export default function Sidebar({
                   <div className="my-1 border-t border-neutral-100" />
                   <MenuItem
                     icon={<FileUp size={13} />}
+                    label="Upload files…"
+                    onClick={() => {
+                      close();
+                      vaultFileInputRef.current?.click();
+                    }}
+                  />
+                  <MenuItem
+                    icon={<FileUp size={13} />}
                     label="Import Markdown…"
                     onClick={() => {
                       close();
@@ -144,6 +154,28 @@ export default function Sidebar({
         <PageTree workspace={workspace} />
         <TagsSection workspace={workspace} />
       </div>
+      <input
+        ref={vaultFileInputRef}
+        type="file"
+        hidden
+        multiple
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) {
+            setImporting(true);
+            uploadFiles.mutate(
+              { files, parentId: null },
+              {
+                onSuccess: () =>
+                  setImportNote(`Uploaded ${files.length} file${files.length === 1 ? '' : 's'}.`),
+                onError: () => setImportNote('File upload failed.'),
+                onSettled: () => setImporting(false),
+              },
+            );
+          }
+          e.target.value = '';
+        }}
+      />
       <input
         ref={fileInputRef}
         type="file"

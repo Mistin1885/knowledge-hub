@@ -18,14 +18,13 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
-    text,
 )
 from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infra.db.base import Base, Timestamped, UUIDPk
-from app.shared.constants import LinkKind, PageStatus, PageVisibility, Role
+from app.shared.constants import LinkKind, NodeType, PageStatus, PageVisibility, Role
 
 # --- identity ---------------------------------------------------------------
 
@@ -113,6 +112,9 @@ class Page(UUIDPk, Timestamped, Base):
     status: Mapped[str] = mapped_column(String(16), default=PageStatus.PUBLISHED, index=True)
     visibility: Mapped[str] = mapped_column(String(16), default=PageVisibility.WORKSPACE)
     is_folder: Mapped[bool] = mapped_column(Boolean, default=False)
+    # ``pages`` is retained as the physical table name for compatibility, but
+    # rows now represent every first-class entry in the workspace vault.
+    node_type: Mapped[str] = mapped_column(String(16), default=NodeType.MARKDOWN, index=True)
     position: Mapped[float] = mapped_column(Float, default=0.0)
     version: Mapped[int] = mapped_column(Integer, default=0)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -259,6 +261,40 @@ class Attachment(UUIDPk, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class FileAsset(Base):
+    """Binary payload owned one-to-one by a ``Page`` whose node_type is file."""
+
+    __tablename__ = "file_assets"
+
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), primary_key=True
+    )
+    content_type: Mapped[str] = mapped_column(String(120))
+    size: Mapped[int] = mapped_column(BigInteger)
+    disk_path: Mapped[str] = mapped_column(String(500))
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+    legacy_attachment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), unique=True, index=True
+    )
+
+
+class NodeAlias(UUIDPk, Base):
+    """Previous canonical vault paths retained after moves and renames."""
+
+    __tablename__ = "node_aliases"
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), index=True
+    )
+    path: Mapped[str] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("workspace_id", "path"),)
+
+
 # --- links ---------------------------------------------------------------
 
 
@@ -272,7 +308,8 @@ class PageLink(UUIDPk, Base):
     target_page_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("pages.id", ondelete="CASCADE"), index=True
     )
-    target_title: Mapped[str] = mapped_column(String(500))
+    # Stores a title for legacy links or a canonical vault path for new links.
+    target_title: Mapped[str] = mapped_column(String(2000))
     kind: Mapped[str] = mapped_column(String(8), default=LinkKind.WIKI)
     context: Mapped[str | None] = mapped_column(Text)
 

@@ -30,6 +30,7 @@ class GraphNodeOut(BaseModel):
     title: str
     icon: str | None
     status: str | None
+    node_type: str | None = None
     is_tag: bool
     link_count: int
 

@@ -124,6 +124,17 @@ body {
   @apply bg-canvas text-[13.5px] text-neutral-900 antialiased;
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ---------- Editor content typography ---------- */
 
 .km-editor .ProseMirror {

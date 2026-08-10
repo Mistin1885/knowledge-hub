@@ -148,6 +148,19 @@ export const pageApi = {
     form.append('file', file, file.name);
     return request<Attachment>(`/pages/${id}/attachments`, { method: 'POST', body: form });
   },
+  uploadFile: (workspaceId: string, file: File, parentId?: string | null) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : '';
+    return request<Page>(`/workspaces/${workspaceId}/files${query}`, {
+      method: 'POST',
+      body: form,
+    });
+  },
+  resolveNode: (workspaceId: string, target: string) =>
+    http.get<Page | null>(
+      `/workspaces/${workspaceId}/resolve?title=${encodeURIComponent(target)}`,
+    ),
   shares: (id: string) => http.get<PageShare[]>(`/pages/${id}/shares`),
   addShare: (id: string, userId: string) =>
     http.post<PageShare>(`/pages/${id}/shares`, { user_id: userId }),

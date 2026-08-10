@@ -57,6 +57,21 @@ export function useDeletePage(workspaceId: string) {
   });
 }
 
+export function useUploadFiles(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ files, parentId }: { files: File[]; parentId?: string | null }) => {
+      const uploaded = [];
+      for (const file of files) uploaded.push(await pageApi.uploadFile(workspaceId, file, parentId));
+      return uploaded;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
+      qc.invalidateQueries({ queryKey: ['children'] });
+    },
+  });
+}
+
 export function useRestoreVersion(pageId: string) {
   const qc = useQueryClient();
   return useMutation({
