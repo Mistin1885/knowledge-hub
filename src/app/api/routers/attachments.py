@@ -30,15 +30,16 @@ def _out(att) -> AttachmentOut:
 
 
 def _out_file(node, asset, preview_kind: str | None) -> AttachmentOut:
+    compatibility_url = f"/api/v1/attachments/{node.id}/{node.title}"
     return AttachmentOut(
         id=node.id,
         filename=node.title,
         content_type=asset.content_type,
         size=asset.size,
-        url=f"/api/v1/files/{node.id}/preview" if preview_kind else f"/api/v1/files/{node.id}/download",
+        url=compatibility_url,
         created_at=node.created_at,
         preview_kind=preview_kind,
-        preview_url=f"/api/v1/files/{node.id}/preview" if preview_kind else None,
+        preview_url=compatibility_url if preview_kind else None,
         download_url=f"/api/v1/files/{node.id}/download",
     )
 

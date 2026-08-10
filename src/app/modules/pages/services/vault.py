@@ -148,7 +148,13 @@ async def upload_file(
             disk_path=str(rel_dir / final_path.name),
             checksum_sha256=digest.hexdigest(),
         )
-        s.add_all([node, asset])
+        # FileAsset intentionally has no ORM relationship back to Page, so
+        # SQLAlchemy cannot infer the foreign-key insert order from add_all().
+        # Flush the node first to make this reliable on PostgreSQL (SQLite test
+        # setups may not enforce the foreign key and therefore hide the bug).
+        s.add(node)
+        await s.flush()
+        s.add(asset)
         await s.flush()
         if parent_id is not None and visibility == PageVisibility.PRIVATE:
             for share in await repo.list_shares(s, parent_id):
