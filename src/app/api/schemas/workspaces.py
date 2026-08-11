@@ -97,4 +97,6 @@ class AuditEntryOut(BaseModel):
 
 class AuditPageOut(BaseModel):
     items: list[AuditEntryOut]
-    next_cursor: str | None
+    page: int
+    page_size: int
+    total: int

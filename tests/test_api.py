@@ -179,22 +179,39 @@ async def test_audit_supports_system_actor_and_structured_detail(client, alice):
 
     ws = await make_workspace(client)
     async with session_factory() as session:
-        session.add(
-            AuditLog(
-                workspace_id=UUID(ws["id"]),
-                actor_id=None,
-                action="system.repair",
-                target_type="workspace",
-                target_id=UUID(ws["id"]),
-                target_title=ws["name"],
-                detail={"fields": ["role", "joined_at"], "count": 2},
-            )
+        session.add_all(
+            [
+                AuditLog(
+                    workspace_id=UUID(ws["id"]),
+                    actor_id=None,
+                    action="system.repair" if index == 0 else "system.event",
+                    target_type="workspace",
+                    target_id=UUID(ws["id"]),
+                    target_title=ws["name"],
+                    detail={"fields": ["role", "joined_at"], "count": index + 2},
+                )
+                for index in range(25)
+            ]
         )
         await session.commit()
 
-    response = await client.get(f"/api/v1/workspaces/{ws['id']}/audit")
-    assert response.status_code == 200
-    entry = next(item for item in response.json()["items"] if item["action"] == "system.repair")
+    first = await client.get(
+        f"/api/v1/workspaces/{ws['id']}/audit", params={"page": 1, "page_size": 20}
+    )
+    second = await client.get(
+        f"/api/v1/workspaces/{ws['id']}/audit", params={"page": 2, "page_size": 20}
+    )
+    assert first.status_code == 200 and second.status_code == 200
+    assert first.json()["total"] == 26
+    assert first.json()["page"] == 1 and first.json()["page_size"] == 20
+    assert len(first.json()["items"]) == 20 and len(second.json()["items"]) == 6
+    ids = [item["id"] for item in [*first.json()["items"], *second.json()["items"]]]
+    assert len(ids) == len(set(ids)) == 26
+    entry = next(
+        item
+        for item in [*first.json()["items"], *second.json()["items"]]
+        if item["action"] == "system.repair"
+    )
     assert entry["actor"] is None
     assert entry["detail"] == {"fields": ["role", "joined_at"], "count": 2}
 

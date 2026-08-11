@@ -1,4 +1,4 @@
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   authApi,
   mentionApi,
@@ -157,12 +157,11 @@ export function useMemberDirectory(workspaceId: string, page: number, enabled = 
   });
 }
 
-export function useAudit(workspaceId: string) {
-  return useInfiniteQuery({
-    queryKey: ['audit', workspaceId],
-    queryFn: ({ pageParam }) => workspaceApi.audit(workspaceId, pageParam),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => last.next_cursor ?? undefined,
+export function useAudit(workspaceId: string, page: number) {
+  return useQuery({
+    queryKey: ['audit', workspaceId, page],
+    queryFn: () => workspaceApi.audit(workspaceId, page),
+    placeholderData: keepPreviousData,
   });
 }
 

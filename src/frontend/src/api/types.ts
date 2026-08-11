@@ -63,7 +63,9 @@ export interface AuditItem {
 
 export interface AuditResponse {
   items: AuditItem[];
-  next_cursor: string | null;
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export type PageStatus = 'draft' | 'published' | 'archived';

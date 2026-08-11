@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Query, Response, status
 
@@ -150,11 +149,16 @@ async def audit_log(
     workspace_id: uuid.UUID,
     user: CurrentUser,
     s: DB,
-    limit: int = Query(default=50, le=200),
-    cursor: datetime | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
 ):
     await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
-    entries = await audit_repo.list_for_workspace(s, workspace_id, limit=limit, before=cursor)
+    entries = await audit_repo.list_for_workspace(
+        s,
+        workspace_id,
+        limit=page_size,
+        offset=(page - 1) * page_size,
+    )
     items = [
         AuditEntryOut(
             id=e.id,
@@ -164,5 +168,9 @@ async def audit_log(
         )
         for e in entries
     ]
-    next_cursor = items[-1].created_at.isoformat() if len(items) == limit else None
-    return AuditPageOut(items=items, next_cursor=next_cursor)
+    return AuditPageOut(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=await audit_repo.count_for_workspace(s, workspace_id),
+    )

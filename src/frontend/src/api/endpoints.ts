@@ -82,9 +82,9 @@ export const workspaceApi = {
   updateMember: (id: string, userId: string, role: Role) =>
     http.patch<Member>(`/workspaces/${id}/members/${userId}`, { role }),
   removeMember: (id: string, userId: string) => http.delete(`/workspaces/${id}/members/${userId}`),
-  audit: (id: string, cursor?: string) =>
+  audit: (id: string, page: number) =>
     http.get<AuditResponse>(
-      `/workspaces/${id}/audit?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      `/workspaces/${id}/audit?page=${encodeURIComponent(page)}&page_size=20`,
     ),
   pages: (id: string) => http.get<Page[]>(`/workspaces/${id}/pages`),
   tree: (id: string, parentId: string | null = null) => {
