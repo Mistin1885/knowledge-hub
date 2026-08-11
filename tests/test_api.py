@@ -449,6 +449,13 @@ async def test_idempotent_obsidian_import_counts_images_and_persisted_order(clie
     assert long_file.status_code == 200, long_file.text
     assert long_file.json()["action"] == "created"
 
+    duplicate_name = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": "Other Vault/pic.png"},
+        files={"file": ("pic.png", png_v1, "image/png")},
+    )
+    assert duplicate_name.status_code == 200, duplicate_name.text
+
     repeated = await client.post(
         f"/api/v1/workspaces/{wid}/import",
         params={"relative_path": "Team Vault/assets/pic.png"},

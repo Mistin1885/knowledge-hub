@@ -183,7 +183,28 @@ async def rewrite_obsidian_images(
         if len(suffix_matches) == 1:
             return suffix_matches[0]
         basename_matches = by_basename.get(posixpath.basename(target).lower(), [])
-        return basename_matches[0] if len(basename_matches) == 1 else None
+        if len(basename_matches) == 1:
+            return basename_matches[0]
+        if len(basename_matches) > 1:
+            source_parts = source_dir.lower().split("/") if source_dir else []
+
+            def proximity(node: Page) -> int:
+                candidate_parts = paths[node.id].lower().split("/")[:-1]
+                return next(
+                    (
+                        index
+                        for index, (left, right) in enumerate(
+                            zip(source_parts, candidate_parts, strict=False)
+                        )
+                        if left != right
+                    ),
+                    min(len(source_parts), len(candidate_parts)),
+                )
+
+            ranked = sorted(basename_matches, key=proximity, reverse=True)
+            if proximity(ranked[0]) > proximity(ranked[1]):
+                return ranked[0]
+        return None
 
     def image_node(raw_target: str) -> Page | None:
         node = resolve(raw_target)
@@ -622,10 +643,11 @@ async def resolve_target(
     if not raw:
         return None
     nodes = await repo.list_workspace(s, workspace_id, Page.id.is_not(None))
+    paths = _paths_for_nodes(nodes)
     exact: list[Page] = []
     basename: list[Page] = []
     for node in nodes:
-        if (await canonical_path(s, node)).lower() == raw.lower():
+        if paths[node.id].lower() == raw.lower():
             exact.append(node)
         if node.title.lower() == raw.lower() or (
             node.node_type == NodeType.MARKDOWN
