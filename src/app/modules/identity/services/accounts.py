@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infra.db.models import User
 from app.modules.identity.domain import tokens as token_policy
 from app.modules.identity.infra import repo
+from app.modules.workspaces.infra import repo as workspace_repo
 from app.shared.config.settings import settings
+from app.shared.constants import Role
 from app.shared.exceptions import PermissionDeniedError, UnauthenticatedError, ValidationFailedError
 from app.shared.utils import new_token, sha256_hex
 
@@ -21,9 +23,16 @@ async def register(s: AsyncSession, email: str, name: str, password: str) -> Use
     first_user = await repo.count_users(s) == 0
     if not first_user and not settings.registration_open:
         raise PermissionDeniedError("Registration is closed; ask an admin to invite you")
-    return await repo.create_user(
+    user = await repo.create_user(
         s, email=email, name=name, password_hash=_hasher.hash(password), is_admin=first_user
     )
+    if not user.is_admin and settings.default_readonly_workspace_slug:
+        workspace = await workspace_repo.get_by_slug(
+            s, settings.default_readonly_workspace_slug
+        )
+        if workspace is not None:
+            await workspace_repo.add_member(s, workspace.id, user.id, Role.VIEWER)
+    return user
 
 
 async def login(

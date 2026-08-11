@@ -12,6 +12,24 @@ async def test_register_login_me(client):
     assert body["is_admin"] is True  # first user becomes instance admin
 
 
+async def test_new_users_receive_read_only_demo_access(client):
+    await register_and_login(client, "owner@test.com", "Owner")
+    demo = await make_workspace(client, "demo")
+
+    await register_and_login(client, "reader@test.com", "Reader")
+    workspaces = (await client.get("/api/v1/workspaces")).json()
+
+    membership = next(item for item in workspaces if item["id"] == demo["id"])
+    assert membership["slug"] == "demo"
+    assert membership["my_role"] == "viewer"
+    assert (
+        await client.post(
+            f"/api/v1/workspaces/{demo['id']}/pages",
+            json={"title": "Cannot create"},
+        )
+    ).status_code == 403
+
+
 async def test_me_unauthenticated(client):
     assert (await client.get("/api/v1/auth/me")).status_code == 401
 

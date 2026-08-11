@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     session_ttl_days: int = 14
     cookie_secure: bool = False
     registration_open: bool = True
+    # New non-admin users receive viewer access when this workspace exists.
+    default_readonly_workspace_slug: str | None = "demo"
 
     # Storage
     uploads_dir: Path = Path("data/uploads")
