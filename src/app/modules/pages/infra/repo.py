@@ -58,6 +58,73 @@ async def max_sibling_position(s: AsyncSession, workspace_id: uuid.UUID, parent_
     return (await s.scalar(q)) or 0.0
 
 
+async def find_sibling(
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    parent_id: uuid.UUID | None,
+    title: str,
+) -> Page | None:
+    q = select(Page).where(
+        Page.workspace_id == workspace_id,
+        func.lower(Page.title) == title.lower(),
+    )
+    q = q.where(Page.parent_id == parent_id) if parent_id else q.where(Page.parent_id.is_(None))
+    return await s.scalar(q)
+
+
+async def lock_workspace_tree(s: AsyncSession, workspace_id: uuid.UUID) -> None:
+    """Serialize tree moves in a workspace and use a stable lock order.
+
+    Tree moves touch both a source and a destination sibling set.  Locking the
+    whole (normally small) tree prevents lost reorder updates and avoids the
+    opposite-direction deadlock that per-parent locking can create.
+    """
+    await s.execute(
+        select(Page.id)
+        .where(Page.workspace_id == workspace_id)
+        .order_by(Page.id)
+        .with_for_update()
+    )
+
+
+async def list_siblings(
+    s: AsyncSession, workspace_id: uuid.UUID, parent_id: uuid.UUID | None
+) -> list[Page]:
+    q = select(Page).where(Page.workspace_id == workspace_id)
+    q = q.where(Page.parent_id == parent_id) if parent_id else q.where(Page.parent_id.is_(None))
+    return list(await s.scalars(q.order_by(Page.position, Page.created_at, Page.id)))
+
+
+def folder_file_counts(nodes: list[Page]) -> dict[uuid.UUID, int]:
+    """Count all non-folder descendants for every folder in a flat tree."""
+    by_parent: dict[uuid.UUID | None, list[Page]] = {}
+    for node in nodes:
+        by_parent.setdefault(node.parent_id, []).append(node)
+
+    memo: dict[uuid.UUID, int] = {}
+
+    def count(node_id: uuid.UUID, visiting: set[uuid.UUID]) -> int:
+        if node_id in memo:
+            return memo[node_id]
+        if node_id in visiting:  # tolerate corrupt legacy cycles without recursing forever
+            return 0
+        next_visiting = visiting | {node_id}
+        total = 0
+        for child in by_parent.get(node_id, []):
+            if child.node_type == "folder" or child.is_folder:
+                total += count(child.id, next_visiting)
+            else:
+                total += 1
+                total += count(child.id, next_visiting)
+        memo[node_id] = total
+        return total
+
+    for node in nodes:
+        if node.node_type == "folder" or node.is_folder:
+            count(node.id, set())
+    return memo
+
+
 async def is_descendant(s: AsyncSession, ancestor_id: uuid.UUID, maybe_descendant_id: uuid.UUID) -> bool:
     """True if maybe_descendant is in the subtree of ancestor (cycle guard for moves)."""
     current = maybe_descendant_id

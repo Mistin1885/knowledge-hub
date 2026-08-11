@@ -48,10 +48,12 @@ status ∈ draft|published|archived   visibility ∈ workspace|private
 ```
 
 - `GET /workspaces/{wid}/pages` → flat `[page]` (client builds tree from parent_id+position)
+- Folder entries include `file_count`, the live recursive count of non-folder descendants.
 - `POST /workspaces/{wid}/pages` `{title, parent_id?, content_md?, is_folder?, status?, visibility?, tags?, metadata?}` → `201 {pageDetail}`
 - `GET /pages/{id}` → `{pageDetail}`
 - `GET /pages/{id}/children` → `[{page, preview}]` — direct children ordered by position, with a plain-text content preview (folder view); per-item annotations live in the child's `metadata.note`
 - `PATCH /pages/{id}` any of `{title, content_md, parent_id, position, icon, status, visibility, tags, metadata, owner_id}` → `{pageDetail}`. Content patch returns `409` if a live collab session is active.
+- `PATCH /pages/{id}/move` `{parent_id, before_id}` → `{pageDetail}` — atomically move/reorder a tree entry; null `before_id` appends it.
 - `DELETE /pages/{id}` → `204` (recursive; requires member+)
 - `GET /pages/{id}/versions` → `[{id, version, title, author: {id,name}|null, created_at, summary}]`
 - `GET /pages/{id}/versions/{vid}` → `{id, version, title, author, content_md, created_at, summary}`
@@ -80,6 +82,7 @@ status ∈ draft|published|archived   visibility ∈ workspace|private
 - File metadata is included in page/node responses: `node_type`, `content_type`, `size`, `created_at`, `preview_kind`, `preview_url`, `download_url`
 - `GET /files/{id}/preview` → inline PDF or validated raster image (auth required)
 - `GET /files/{id}/download` → forced attachment download (auth required)
+- `POST /workspaces/{wid}/import?relative_path=...&parent_id=...` multipart `file` → `{action, page, folders_created, warnings}`. Upserts by relative Vault path, compares Markdown content or binary SHA-256, and rewrites resolvable Obsidian image embeds to preview URLs.
 - `PATCH /pages/{id}` moves or renames file nodes using the existing `parent_id`, `position`, and `title` fields
 - `GET /workspaces/{id}/resolve?title=Folder/file.pdf` resolves canonical Vault paths and previous path aliases
 

@@ -72,10 +72,37 @@ export function useUploadFiles(workspaceId: string) {
       // into the flat Vault cache and let later navigation refresh naturally.
       qc.setQueryData<Page[]>(['pages', workspaceId], (current = []) => {
         const uploadedIds = new Set(uploaded.map((page) => page.id));
-        return [...current.filter((page) => !uploadedIds.has(page.id)), ...uploaded];
+        const byId = new Map(current.map((page) => [page.id, page]));
+        const increments = new Map<string, number>();
+        for (const item of uploaded) {
+          let parentId = item.parent_id;
+          const seen = new Set<string>();
+          while (parentId && !seen.has(parentId)) {
+            seen.add(parentId);
+            const parent = byId.get(parentId);
+            if (!parent) break;
+            if (parent.node_type === 'folder' || parent.is_folder) {
+              increments.set(parent.id, (increments.get(parent.id) ?? 0) + 1);
+            }
+            parentId = parent.parent_id;
+          }
+        }
+        return [
+          ...current
+            .filter((page) => !uploadedIds.has(page.id))
+            .map((page) =>
+              increments.has(page.id)
+                ? { ...page, file_count: (page.file_count ?? 0) + (increments.get(page.id) ?? 0) }
+                : page,
+            ),
+          ...uploaded,
+        ];
       });
       for (const page of uploaded) qc.setQueryData(['page', page.id], page);
       qc.invalidateQueries({ queryKey: ['children'], refetchType: 'none' });
+      window.setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
+      }, 300);
     },
   });
 }

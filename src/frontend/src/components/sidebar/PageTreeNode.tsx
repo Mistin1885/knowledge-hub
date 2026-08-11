@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   FolderPlus,
+  FolderUp,
 } from 'lucide-react';
 import type { Page } from '../../api/types';
 import { pageApi } from '../../api/endpoints';
@@ -28,8 +29,14 @@ export interface TreeActions {
   onRename: (page: Page) => void;
   onDelete: (page: Page) => void;
   onToggleFolder: (page: Page) => void;
-  onMovePage: (pageId: string, parentId: string | null) => void;
+  onMovePage: (
+    pageId: string,
+    target: Page | null,
+    placement: 'before' | 'inside' | 'after',
+  ) => void;
   onChooseFiles: (parent: Page | null) => void;
+  onChooseImportFile: (parent: Page) => void;
+  onChooseImportFolder: (parent: Page) => void;
   onFilesDropped: (parent: Page | null, files: File[]) => void;
 }
 
@@ -60,7 +67,7 @@ export default function PageTreeNode({
   const hasChildren = children.length > 0;
   const isCurrent = page.id === currentPageId;
   const canContain = page.node_type !== 'file';
-  const [dragOver, setDragOver] = useState(false);
+  const [dragOver, setDragOver] = useState<'before' | 'inside' | 'after' | null>(null);
 
   const FolderIcon = isExpanded ? FolderOpen : Folder;
 
@@ -75,35 +82,53 @@ export default function PageTreeNode({
           e.dataTransfer.effectAllowed = 'move';
         }}
         onDragOver={
-          canContain && canEdit
+          canEdit
             ? (e) => {
                 const hasFiles = e.dataTransfer.types.includes('Files');
                 if (!hasFiles && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+                if (hasFiles && !canContain) return;
                 e.preventDefault();
                 e.stopPropagation();
                 e.dataTransfer.dropEffect = hasFiles ? 'copy' : 'move';
-                setDragOver(true);
+                if (hasFiles) {
+                  setDragOver('inside');
+                  return;
+                }
+                const ratio = (e.clientY - e.currentTarget.getBoundingClientRect().top) /
+                  e.currentTarget.getBoundingClientRect().height;
+                const canNest = page.node_type === 'folder' || page.is_folder;
+                setDragOver(
+                  canNest && ratio >= 0.28 && ratio <= 0.72
+                    ? 'inside'
+                    : ratio < 0.5
+                      ? 'before'
+                      : 'after',
+                );
               }
             : undefined
         }
-        onDragLeave={canContain ? () => setDragOver(false) : undefined}
+        onDragLeave={canEdit ? () => setDragOver(null) : undefined}
         onDrop={
-          canContain && canEdit
+          canEdit
             ? (e) => {
                 const files = Array.from(e.dataTransfer.files ?? []);
                 if (files.length === 0 && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+                if (files.length > 0 && !canContain) return;
                 e.preventDefault();
                 e.stopPropagation();
-                setDragOver(false);
+                const placement = dragOver ?? 'after';
+                setDragOver(null);
                 if (files.length) actions.onFilesDropped(page, files);
-                else actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), page.id);
+                else actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), page, placement);
               }
             : undefined
         }
         className={cn(
           'group flex items-center gap-1 rounded-md py-1 pr-1 transition-colors duration-150',
           isCurrent ? 'bg-indigo-50 text-indigo-700' : 'text-neutral-700 hover:bg-neutral-100',
-          dragOver && 'bg-indigo-50 ring-1 ring-inset ring-indigo-300',
+          dragOver === 'inside' && 'bg-indigo-50 ring-1 ring-inset ring-indigo-300',
+          dragOver === 'before' && 'border-t-2 border-indigo-400',
+          dragOver === 'after' && 'border-b-2 border-indigo-400',
         )}
         style={{ paddingLeft: `${depth * 14 + 2}px` }}
       >
@@ -133,6 +158,14 @@ export default function PageTreeNode({
             <FileText size={14} className="flex-none text-neutral-400" />
           )}
           <span className="truncate">{page.title || 'Untitled'}</span>
+          {(page.node_type === 'folder' || page.is_folder) && (
+            <span
+              className="ml-auto flex-none rounded-full bg-neutral-100 px-1.5 text-[10px] tabular-nums text-neutral-500"
+              title={`${page.file_count ?? 0} files in this folder and its subfolders`}
+            >
+              {page.file_count ?? 0}
+            </span>
+          )}
         </Link>
         {canEdit && (
           <div className="invisible flex-none group-hover:visible">
@@ -170,6 +203,26 @@ export default function PageTreeNode({
                         actions.onNewSubpage(page, true);
                       }}
                     />
+                  )}
+                  {(page.node_type === 'folder' || page.is_folder) && (
+                    <>
+                      <MenuItem
+                        icon={<FileUp size={13} />}
+                        label="Import file…"
+                        onClick={() => {
+                          close();
+                          actions.onChooseImportFile(page);
+                        }}
+                      />
+                      <MenuItem
+                        icon={<FolderUp size={13} />}
+                        label="Import folder / Obsidian Vault…"
+                        onClick={() => {
+                          close();
+                          actions.onChooseImportFolder(page);
+                        }}
+                      />
+                    </>
                   )}
                   {canContain && (
                     <MenuItem

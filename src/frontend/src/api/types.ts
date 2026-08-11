@@ -75,6 +75,7 @@ export interface Page {
   preview_kind: 'image' | 'pdf' | null;
   preview_url: string | null;
   download_url: string | null;
+  file_count: number | null;
 }
 
 export interface PageDetail extends Page {

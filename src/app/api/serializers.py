@@ -9,7 +9,9 @@ from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import vault
 
 
-async def page_out(s: AsyncSession, page: Page) -> PageOut:
+async def page_out(
+    s: AsyncSession, page: Page, *, file_count: int | None = None
+) -> PageOut:
     # explicit fetch instead of the lazy relationship: pages arrive here from
     # arbitrary queries and lazy-loading is unavailable under asyncio
     owner = await s.get(User, page.owner_id) if page.owner_id else None
@@ -38,6 +40,7 @@ async def page_out(s: AsyncSession, page: Page) -> PageOut:
         preview_kind=preview_kind,
         preview_url=f"/api/v1/files/{page.id}/preview" if preview_kind else None,
         download_url=f"/api/v1/files/{page.id}/download" if asset else None,
+        file_count=file_count if page.node_type == "folder" or page.is_folder else None,
     )
 
 

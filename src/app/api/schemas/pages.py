@@ -34,6 +34,18 @@ class PageUpdateIn(BaseModel):
     is_folder: bool | None = None
 
 
+class PageMoveIn(BaseModel):
+    """Move a node and place it immediately before ``before_id``.
+
+    A null ``before_id`` appends the node to the destination level.  Keeping
+    this as one server-side operation avoids two collaborators racing while
+    the browser sends several independent position updates.
+    """
+
+    parent_id: uuid.UUID | None = None
+    before_id: uuid.UUID | None = None
+
+
 class PageOut(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -57,6 +69,7 @@ class PageOut(BaseModel):
     preview_kind: str | None = None
     preview_url: str | None = None
     download_url: str | None = None
+    file_count: int | None = None
 
 
 class PageDetailOut(PageOut):
@@ -68,6 +81,13 @@ class PageDetailOut(PageOut):
 class ChildPageOut(BaseModel):
     page: PageOut
     preview: str
+
+
+class VaultImportOut(BaseModel):
+    action: str
+    page: PageOut
+    folders_created: int = 0
+    warnings: list[str] = Field(default_factory=list)
 
 
 class VersionOut(ORMModel):

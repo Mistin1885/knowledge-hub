@@ -4,12 +4,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import { FileText, Folder, FolderUp, FileUp, Loader2, Plus, Search } from 'lucide-react';
 import type { Workspace } from '../../api/types';
 import { useCreatePage, useUploadFiles } from '../../hooks/mutations';
-import { importMarkdownFiles } from '../../lib/importMd';
+import {
+  importVaultFiles,
+  type ImportProgress,
+  type ImportResult,
+} from '../../lib/importMd';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 import { Input } from '../ui/primitives';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import PageTree from '../sidebar/PageTree';
 import TagsSection from '../sidebar/TagsSection';
+import ImportStatus from '../sidebar/ImportStatus';
 
 export default function Sidebar({
   workspace,
@@ -30,6 +35,8 @@ export default function Sidebar({
   const vaultFileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,21 +54,23 @@ export default function Sidebar({
     if (!list || list.length === 0) return;
     setImporting(true);
     setImportNote(null);
+    setImportResult(null);
     try {
-      const r = await importMarkdownFiles(workspace.id, Array.from(list));
-      const parts = [`${r.pages} page${r.pages === 1 ? '' : 's'}`];
-      if (r.folders) parts.push(`${r.folders} folder${r.folders === 1 ? '' : 's'}`);
-      if (r.skipped) parts.push(`${r.skipped} non-md skipped`);
-      if (r.failed) parts.push(`${r.failed} failed`);
-      setImportNote(`Imported ${parts.join(', ')}`);
+      const result = await importVaultFiles(
+        workspace.id,
+        Array.from(list),
+        null,
+        setImportProgress,
+      );
+      setImportResult(result);
     } catch {
       setImportNote('Import failed.');
     } finally {
       setImporting(false);
+      setImportProgress(null);
       qc.invalidateQueries({ queryKey: ['pages', workspace.id] });
       qc.invalidateQueries({ queryKey: ['tags', workspace.id] });
       qc.invalidateQueries({ queryKey: ['children'] });
-      window.setTimeout(() => setImportNote(null), 8000);
     }
   };
 
@@ -127,7 +136,7 @@ export default function Sidebar({
                   />
                   <MenuItem
                     icon={<FileUp size={13} />}
-                    label="Import Markdown…"
+                    label="Import file…"
                     onClick={() => {
                       close();
                       fileInputRef.current?.click();
@@ -135,7 +144,7 @@ export default function Sidebar({
                   />
                   <MenuItem
                     icon={<FolderUp size={13} />}
-                    label="Import folder…"
+                    label="Import folder / Obsidian Vault…"
                     onClick={() => {
                       close();
                       dirInputRef.current?.click();
@@ -151,6 +160,7 @@ export default function Sidebar({
             {importNote}
           </p>
         )}
+        <ImportStatus progress={importProgress} result={importResult} />
         <PageTree workspace={workspace} />
         <TagsSection workspace={workspace} />
       </div>
@@ -181,7 +191,6 @@ export default function Sidebar({
         type="file"
         hidden
         multiple
-        accept=".md,.markdown,text/markdown"
         onChange={(e) => {
           void runImport(e.target.files);
           e.target.value = '';

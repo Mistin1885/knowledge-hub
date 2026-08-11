@@ -122,12 +122,24 @@ export interface UpdatePageInput {
   is_folder?: boolean;
 }
 
+export interface ImportItemResult {
+  action: 'created' | 'updated' | 'skipped';
+  page: Page;
+  folders_created: number;
+  warnings: string[];
+}
+
 export const pageApi = {
   children: (id: string) => http.get<ChildPage[]>(`/pages/${id}/children`),
   create: (workspaceId: string, data: CreatePageInput) =>
     http.post<PageDetail>(`/workspaces/${workspaceId}/pages`, data),
   get: (id: string) => http.get<PageDetail>(`/pages/${id}`),
   update: (id: string, data: UpdatePageInput) => http.patch<PageDetail>(`/pages/${id}`, data),
+  move: (id: string, parentId: string | null, beforeId: string | null) =>
+    http.patch<PageDetail>(`/pages/${id}/move`, {
+      parent_id: parentId,
+      before_id: beforeId,
+    }),
   remove: (id: string) => http.delete(`/pages/${id}`),
   exportUrl: (id: string) => `/api/v1/pages/${id}/export`,
   versions: (id: string) => http.get<PageVersion[]>(`/pages/${id}/versions`),
@@ -153,6 +165,21 @@ export const pageApi = {
     form.append('file', file, file.name);
     const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : '';
     return request<Page>(`/workspaces/${workspaceId}/files${query}`, {
+      method: 'POST',
+      body: form,
+    });
+  },
+  importItem: (
+    workspaceId: string,
+    file: File,
+    relativePath: string,
+    parentId?: string | null,
+  ) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const params = new URLSearchParams({ relative_path: relativePath });
+    if (parentId) params.set('parent_id', parentId);
+    return request<ImportItemResult>(`/workspaces/${workspaceId}/import?${params}`, {
       method: 'POST',
       body: form,
     });

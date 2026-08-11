@@ -424,6 +424,95 @@ async def test_vault_file_nodes_preview_download_move_and_alias(client, alice):
     assert new_path.json()["id"] == node["id"]
 
 
+async def test_idempotent_obsidian_import_counts_images_and_persisted_order(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    png_v1 = b"\x89PNG\r\n\x1a\n" + b"first-image"
+
+    imported = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": "Team Vault/assets/pic.png"},
+        files={"file": ("pic.png", png_v1, "image/png")},
+    )
+    assert imported.status_code == 200, imported.text
+    first = imported.json()
+    assert first["action"] == "created"
+    assert first["folders_created"] == 2
+    file_id = first["page"]["id"]
+
+    long_name = ("長檔名" * 40) + ".png"
+    long_file = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": f"Long names/{long_name}"},
+        files={"file": (long_name, png_v1, "image/png")},
+    )
+    assert long_file.status_code == 200, long_file.text
+    assert long_file.json()["action"] == "created"
+
+    repeated = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": "Team Vault/assets/pic.png"},
+        files={"file": ("pic.png", png_v1, "image/png")},
+    )
+    assert repeated.json()["action"] == "skipped"
+    assert repeated.json()["page"]["id"] == file_id
+
+    png_v2 = b"\x89PNG\r\n\x1a\n" + b"updated-image"
+    updated = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": "Team Vault/assets/pic.png"},
+        files={"file": ("pic.png", png_v2, "image/png")},
+    )
+    assert updated.json()["action"] == "updated"
+    assert updated.json()["page"]["id"] == file_id
+    assert (await client.get(f"/api/v1/files/{file_id}/preview")).content == png_v2
+
+    note = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": "Team Vault/notes/Guide.md"},
+        files={"file": ("Guide.md", b"# Guide\n\n![[pic.png]]", "text/markdown")},
+    )
+    assert note.status_code == 200, note.text
+    assert note.json()["action"] == "created"
+    detail = (await client.get(f"/api/v1/pages/{note.json()['page']['id']}")).json()
+    assert f"![pic](/api/v1/files/{file_id}/preview)" in detail["content_md"]
+
+    repeated_note = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": "Team Vault/notes/Guide.md"},
+        files={"file": ("Guide.md", b"# Guide\n\n![[pic.png]]", "text/markdown")},
+    )
+    assert repeated_note.json()["action"] == "skipped"
+
+    pages = (await client.get(f"/api/v1/workspaces/{wid}/pages")).json()
+    vault_folder = next(page for page in pages if page["title"] == "Team Vault")
+    assets_folder = next(page for page in pages if page["title"] == "assets")
+    notes_folder = next(page for page in pages if page["title"] == "notes")
+    assert vault_folder["file_count"] == 2
+    assert assets_folder["file_count"] == 1
+    assert notes_folder["file_count"] == 1
+
+    a = (await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "A"})).json()
+    await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "B"})
+    c = (await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "C"})).json()
+    moved = await client.patch(
+        f"/api/v1/pages/{c['id']}/move",
+        json={"parent_id": None, "before_id": a["id"]},
+    )
+    assert moved.status_code == 200, moved.text
+    roots = [
+        page["title"]
+        for page in (await client.get(f"/api/v1/workspaces/{wid}/pages")).json()
+        if page["parent_id"] is None
+    ]
+    assert roots.index("C") < roots.index("A") < roots.index("B")
+
+    assert (await client.delete(f"/api/v1/pages/{file_id}")).status_code == 204
+    pages = (await client.get(f"/api/v1/workspaces/{wid}/pages")).json()
+    vault_folder = next(page for page in pages if page["title"] == "Team Vault")
+    assert vault_folder["file_count"] == 1
+
+
 async def test_non_previewable_vault_file_metadata_and_download(client, alice):
     ws = await make_workspace(client)
     payload = b"PK\x03\x04not-really-a-zip"

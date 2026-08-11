@@ -10,6 +10,7 @@ from app.api.schemas.pages import (
     MetadataKeyOut,
     PageCreateIn,
     PageDetailOut,
+    PageMoveIn,
     PageOut,
     PageUpdateIn,
     ShareIn,
@@ -32,7 +33,11 @@ router = APIRouter(tags=["pages"])
 @router.get("/workspaces/{workspace_id}/pages", response_model=list[PageOut])
 async def list_pages(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
     pages = await pages_service.list_workspace(s, user, workspace_id)
-    return [await serializers.page_out(s, p) for p in pages]
+    counts = pages_repo.folder_file_counts(pages)
+    return [
+        await serializers.page_out(s, page, file_count=counts.get(page.id))
+        for page in pages
+    ]
 
 
 @router.post(
@@ -72,6 +77,12 @@ async def get_page(page_id: uuid.UUID, user: CurrentUser, s: DB):
 async def update_page(page_id: uuid.UUID, body: PageUpdateIn, user: CurrentUser, s: DB):
     fields = body.model_dump(exclude_unset=True)
     page = await pipeline.update_page(s, user, page_id, fields)
+    return await serializers.page_detail_out(s, page)
+
+
+@router.patch("/pages/{page_id}/move", response_model=PageDetailOut)
+async def move_page(page_id: uuid.UUID, body: PageMoveIn, user: CurrentUser, s: DB):
+    page = await pipeline.move_page(s, user, page_id, body.parent_id, body.before_id)
     return await serializers.page_detail_out(s, page)
 
 
