@@ -86,6 +86,9 @@ export default function GraphCanvas({
         if (node.is_tag) {
           ctx.fillStyle = '#f59e0b';
           ctx.fillRect(node.x - r, node.y - r, r * 2, r * 2);
+        } else if (node.node_type === 'file') {
+          ctx.fillStyle = '#0ea5e9';
+          ctx.fillRect(node.x - r, node.y - r, r * 2, r * 2);
         } else {
           ctx.beginPath();
           ctx.arc(node.x, node.y, r, 0, Math.PI * 2);

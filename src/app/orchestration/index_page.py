@@ -14,12 +14,19 @@ from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import pages as pages_service
 from app.modules.search.domain import sanitize
 from app.modules.search.services import indexer
-from app.shared.constants import PageStatus, PageVisibility
+from app.shared.constants import NodeType, PageStatus, PageVisibility
 
 
 async def index_page(s: AsyncSession, page: Page, *, title_changed: bool = False) -> None:
     """Refresh everything derived from content: links, search text, frontmatter
     tags/metadata, chunks + embeddings. Idempotent."""
+    if page.node_type == NodeType.FILE:
+        page.search_text = page.title
+        await links_repo.replace_links(s, page, [])
+        await links_repo.resolve_pending_links_to(s, page)
+        await indexer.index_page_chunks(s, page)
+        return
+
     doc = parser.parse_document(page.content_md)
 
     plain = sanitize.sanitize_for_search(doc.plain_text)
@@ -80,13 +87,28 @@ async def update_page(s: AsyncSession, user: User, page_id: uuid.UUID, fields: d
             raise ConflictError(
                 "Page is being edited in a live collaboration session; content updates must go through it"
             )
+    path_changed = (
+        (fields.get("title") is not None and fields.get("title", "").strip() != page.title)
+        or ("parent_id" in fields and fields["parent_id"] != page.parent_id)
+    )
     content_changed, title_changed = await pages_service.apply_update(s, user, page, fields)
     if content_changed or title_changed:
         await index_page(s, page, title_changed=title_changed)
-        await pages_repo.add_version(s, page, user.id)
+        if page.node_type != NodeType.FILE:
+            await pages_repo.add_version(s, page, user.id)
+    if path_changed:
+        from app.modules.pages.services import vault
+
+        for descendant, _path in await vault.subtree_paths(s, page):
+            await links_repo.resolve_pending_links_to(s, descendant)
     await audit.record(
-        s, workspace_id=page.workspace_id, actor_id=user.id, action="page.update",
-        target_type="page", target_id=page.id, target_title=page.title,
+        s,
+        workspace_id=page.workspace_id,
+        actor_id=user.id,
+        action="file.update" if page.node_type == NodeType.FILE else "page.update",
+        target_type="file" if page.node_type == NodeType.FILE else "page",
+        target_id=page.id,
+        target_title=page.title,
         detail={"fields": sorted(k for k, v in fields.items() if v is not None)},
     )
     return page
@@ -133,7 +155,7 @@ async def snapshot_from_collab(
     from app.infra.db.models import User as UserModel
 
     page = await pages_repo.get(s, page_id)
-    if page is None:
+    if page is None or page.node_type == NodeType.FILE:
         return
     if page.content_md != content_md:
         page.content_md = content_md

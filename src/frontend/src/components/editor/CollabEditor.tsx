@@ -17,6 +17,7 @@ import type { Page, User, Workspace } from '../../api/types';
 import { pageApi } from '../../api/endpoints';
 import { useCreatePage } from '../../hooks/mutations';
 import { colorForUser } from '../../lib/color';
+import { vaultPath } from '../../lib/tree';
 import { Wikilinks, type WikilinkAutocompleteState } from './wikilinks';
 import WikilinkSuggest from './WikilinkSuggest';
 import CreateLinkPopover from './CreateLinkPopover';
@@ -30,7 +31,10 @@ async function insertImagesAt(view: EditorView, pageId: string, files: File[], p
     try {
       const att = await pageApi.uploadAttachment(pageId, file);
       const { state } = view;
-      const node = state.schema.nodes.image.create({ src: att.url, alt: att.filename });
+      const node = state.schema.nodes.image.create({
+        src: att.preview_url ?? att.url,
+        alt: att.filename,
+      });
       const at = Math.min(insertAt, state.doc.content.size);
       view.dispatch(state.tr.insert(at, node));
       insertAt = at + node.nodeSize;
@@ -117,9 +121,20 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
   }, []);
 
   const handleLinkClick = (title: string, coords: { x: number; y: number }) => {
-    const target = pagesRef.current.find((p) => p.title.toLowerCase() === title.toLowerCase());
-    if (target) navigate(`/w/${workspace.slug}/p/${target.id}`);
-    else setCreateLink({ title, ...coords });
+    const normalized = title.split('#', 1)[0].toLowerCase();
+    const targetByPath = pagesRef.current.find(
+      (p) => vaultPath(pagesRef.current, p.id).toLowerCase() === normalized,
+    );
+    const basenameMatches = pagesRef.current.filter((p) => p.title.toLowerCase() === normalized);
+    const target = targetByPath ?? (basenameMatches.length === 1 ? basenameMatches[0] : undefined);
+    if (target) {
+      navigate(`/w/${workspace.slug}/p/${target.id}`);
+      return;
+    }
+    void pageApi.resolveNode(workspace.id, title).then((resolved) => {
+      if (resolved) navigate(`/w/${workspace.slug}/p/${resolved.id}`);
+      else setCreateLink({ title, ...coords });
+    });
   };
   const linkClickRef = useRef(handleLinkClick);
   linkClickRef.current = handleLinkClick;
@@ -186,12 +201,13 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
     editor?.setEditable(editable);
   }, [editor, editable]);
 
-  const pickSuggestion = (title: string) => {
+  const pickSuggestion = (target: Page) => {
     if (!editor || !autocomplete) return;
+    const targetPath = vaultPath(pages, target.id);
     editor
       .chain()
       .focus()
-      .insertContentAt({ from: autocomplete.from, to: autocomplete.to }, `${title}]]`)
+      .insertContentAt({ from: autocomplete.from, to: autocomplete.to }, `${targetPath}]]`)
       .run();
     setAutocomplete(null);
   };

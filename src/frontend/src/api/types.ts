@@ -50,6 +50,7 @@ export interface AuditResponse {
 
 export type PageStatus = 'draft' | 'published' | 'archived';
 export type PageVisibility = 'workspace' | 'private';
+export type NodeType = 'markdown' | 'folder' | 'file';
 
 export interface Page {
   id: string;
@@ -61,6 +62,7 @@ export interface Page {
   visibility: PageVisibility;
   position: number;
   is_folder: boolean;
+  node_type: NodeType;
   owner: UserRef;
   tags: string[];
   metadata: Record<string, string>;
@@ -68,6 +70,11 @@ export interface Page {
   updated_by: string;
   created_at: string;
   updated_at: string;
+  content_type: string | null;
+  size: number | null;
+  preview_kind: 'image' | 'pdf' | null;
+  preview_url: string | null;
+  download_url: string | null;
 }
 
 export interface PageDetail extends Page {
@@ -147,7 +154,8 @@ export interface GraphNode {
   id: string;
   title: string;
   icon: string | null;
-  status: PageStatus;
+  status: PageStatus | null;
+  node_type: NodeType | null;
   tag_count: number;
   link_count: number;
   is_tag?: boolean;
@@ -202,6 +210,10 @@ export interface Attachment {
   content_type: string;
   size: number;
   url: string;
+  created_at: string;
+  preview_kind: 'image' | 'pdf' | null;
+  preview_url: string | null;
+  download_url: string;
 }
 
 export interface PageShare {

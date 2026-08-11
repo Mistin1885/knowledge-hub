@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { File, Search } from 'lucide-react';
 import type { SearchMode } from '../api/types';
 import { useWorkspaceCtx } from '../components/layout/WorkspaceLayout';
 import { useSearch, useTags } from '../hooks/queries';
@@ -142,10 +142,18 @@ export default function SearchPage() {
                     className="block rounded-md border border-neutral-200 bg-surface px-4 py-3 transition-colors duration-150 hover:border-indigo-200"
                   >
                     <div className="flex items-center gap-2">
+                      {result.page.node_type === 'file' && (
+                        <File size={14} className="flex-none text-sky-500" />
+                      )}
                       <p className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-900">
                         {result.page.icon ? `${result.page.icon} ` : ''}
                         <Highlighted text={result.page.title || 'Untitled'} query={q} />
                       </p>
+                      {result.page.node_type === 'file' && (
+                        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500">
+                          file
+                        </span>
+                      )}
                       <span className="flex-none text-[11px] tabular-nums text-neutral-400">
                         {result.score.toFixed(2)}
                       </span>

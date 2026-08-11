@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,7 +17,10 @@ class Settings(BaseSettings):
 
     # Storage
     uploads_dir: Path = Path("data/uploads")
-    max_upload_mb: int = 50
+    # KM_MAX_UPLOAD accepts human-readable binary units (for example 5G).
+    # KM_MAX_UPLOAD_MB remains supported for existing deployments.
+    max_upload: str | None = None
+    max_upload_mb: int = 5 * 1024
     frontend_dist: Path = Path("src/frontend/dist")
 
     # Embeddings (any OpenAI-compatible endpoint); semantic search is disabled when unset
@@ -31,6 +35,17 @@ class Settings(BaseSettings):
     collab_persist_every_updates: int = 50
 
     log_level: str = "INFO"
+
+    @property
+    def max_upload_bytes(self) -> int:
+        if self.max_upload:
+            match = re.fullmatch(r"\s*(\d+)\s*([KMGT]?)B?\s*", self.max_upload.upper())
+            if not match:
+                raise ValueError("KM_MAX_UPLOAD must look like 512M or 5G")
+            value = int(match.group(1))
+            power = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4}[match.group(2)]
+            return value * (1024**power)
+        return self.max_upload_mb * 1024 * 1024
 
 
 settings = Settings()

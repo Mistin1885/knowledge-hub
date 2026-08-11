@@ -4,7 +4,10 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  File as FileIcon,
+  FileImage,
   FileText,
+  FileUp,
   Folder,
   FolderOpen,
   FolderInput,
@@ -26,6 +29,8 @@ export interface TreeActions {
   onDelete: (page: Page) => void;
   onToggleFolder: (page: Page) => void;
   onMovePage: (pageId: string, parentId: string | null) => void;
+  onChooseFiles: (parent: Page | null) => void;
+  onFilesDropped: (parent: Page | null, files: File[]) => void;
 }
 
 /** dataTransfer type for dragging a page row between tree levels. */
@@ -54,6 +59,7 @@ export default function PageTreeNode({
   const isExpanded = expanded.has(page.id);
   const hasChildren = children.length > 0;
   const isCurrent = page.id === currentPageId;
+  const canContain = page.node_type !== 'file';
   const [dragOver, setDragOver] = useState(false);
 
   const FolderIcon = isExpanded ? FolderOpen : Folder;
@@ -69,25 +75,28 @@ export default function PageTreeNode({
           e.dataTransfer.effectAllowed = 'move';
         }}
         onDragOver={
-          page.is_folder && canEdit
+          canContain && canEdit
             ? (e) => {
-                if (!e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+                const hasFiles = e.dataTransfer.types.includes('Files');
+                if (!hasFiles && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
                 e.preventDefault();
                 e.stopPropagation();
-                e.dataTransfer.dropEffect = 'move';
+                e.dataTransfer.dropEffect = hasFiles ? 'copy' : 'move';
                 setDragOver(true);
               }
             : undefined
         }
-        onDragLeave={page.is_folder ? () => setDragOver(false) : undefined}
+        onDragLeave={canContain ? () => setDragOver(false) : undefined}
         onDrop={
-          page.is_folder && canEdit
+          canContain && canEdit
             ? (e) => {
-                if (!e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
+                const files = Array.from(e.dataTransfer.files ?? []);
+                if (files.length === 0 && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
                 e.preventDefault();
                 e.stopPropagation();
                 setDragOver(false);
-                actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), page.id);
+                if (files.length) actions.onFilesDropped(page, files);
+                else actions.onMovePage(e.dataTransfer.getData(PAGE_DND_TYPE), page.id);
               }
             : undefined
         }
@@ -102,7 +111,7 @@ export default function PageTreeNode({
           onClick={() => onToggleExpand(page.id)}
           className={cn(
             'flex-none rounded p-0.5 text-neutral-400 hover:text-neutral-600',
-            !hasChildren && !page.is_folder && 'invisible',
+            !hasChildren && page.node_type !== 'folder' && 'invisible',
           )}
           aria-label={isExpanded ? 'Collapse' : 'Expand'}
         >
@@ -114,8 +123,12 @@ export default function PageTreeNode({
         >
           {page.icon ? (
             <span className="w-4 flex-none text-center text-sm leading-none">{page.icon}</span>
-          ) : page.is_folder ? (
+          ) : page.node_type === 'folder' || page.is_folder ? (
             <FolderIcon size={14} className="flex-none text-neutral-400" />
+          ) : page.preview_kind === 'image' ? (
+            <FileImage size={14} className="flex-none text-neutral-400" />
+          ) : page.node_type === 'file' ? (
+            <FileIcon size={14} className="flex-none text-neutral-400" />
           ) : (
             <FileText size={14} className="flex-none text-neutral-400" />
           )}
@@ -137,22 +150,34 @@ export default function PageTreeNode({
             >
               {(close) => (
                 <>
-                  <MenuItem
-                    icon={<Plus size={13} />}
-                    label="New subpage"
-                    onClick={() => {
-                      close();
-                      actions.onNewSubpage(page, false);
-                    }}
-                  />
+                  {canContain && (
+                    <MenuItem
+                      icon={<Plus size={13} />}
+                      label="New subpage"
+                      onClick={() => {
+                        close();
+                        actions.onNewSubpage(page, false);
+                      }}
+                    />
+                  )}
                   {/* Subfolders only make sense inside a folder — convert the page first. */}
-                  {page.is_folder && (
+                  {(page.node_type === 'folder' || page.is_folder) && (
                     <MenuItem
                       icon={<FolderPlus size={13} />}
                       label="New subfolder"
                       onClick={() => {
                         close();
                         actions.onNewSubpage(page, true);
+                      }}
+                    />
+                  )}
+                  {canContain && (
+                    <MenuItem
+                      icon={<FileUp size={13} />}
+                      label="Upload files…"
+                      onClick={() => {
+                        close();
+                        actions.onChooseFiles(page);
                       }}
                     />
                   )}
@@ -164,20 +189,28 @@ export default function PageTreeNode({
                       actions.onRename(page);
                     }}
                   />
-                  <MenuItem
-                    icon={<FolderInput size={13} />}
-                    label={page.is_folder ? 'Convert to page' : 'Convert to folder'}
-                    onClick={() => {
-                      close();
-                      actions.onToggleFolder(page);
-                    }}
-                  />
+                  {page.node_type !== 'file' && (
+                    <MenuItem
+                      icon={<FolderInput size={13} />}
+                      label={page.is_folder ? 'Convert to page' : 'Convert to folder'}
+                      onClick={() => {
+                        close();
+                        actions.onToggleFolder(page);
+                      }}
+                    />
+                  )}
                   <MenuItem
                     icon={<Download size={13} />}
-                    label={page.is_folder ? 'Export as .zip' : 'Export as .md'}
+                    label={
+                      page.node_type === 'file'
+                        ? 'Download'
+                        : page.is_folder
+                          ? 'Export as .zip'
+                          : 'Export as .md'
+                    }
                     onClick={() => {
                       close();
-                      downloadFile(pageApi.exportUrl(page.id));
+                      downloadFile(page.download_url ?? pageApi.exportUrl(page.id));
                     }}
                   />
                   <MenuItem

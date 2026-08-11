@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Response, status
+from fastapi.responses import FileResponse
 
 from app.api import serializers
 from app.api.deps import DB, CurrentUser
@@ -20,9 +21,10 @@ from app.api.schemas.pages import (
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import export as export_service
 from app.modules.pages.services import pages as pages_service
+from app.modules.pages.services import vault
 from app.modules.workspaces.services import policy
 from app.orchestration import index_page as pipeline
-from app.shared.constants import Permission
+from app.shared.constants import NodeType, Permission
 
 router = APIRouter(tags=["pages"])
 
@@ -82,6 +84,15 @@ async def delete_page(page_id: uuid.UUID, user: CurrentUser, s: DB):
 async def export_page(page_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
     """Folder pages download as a zip of their subtree; regular pages as one .md file."""
     page = await pages_service.get_for_read(s, user, page_id)
+    if page.node_type == NodeType.FILE:
+        node, asset, path, _preview_kind = await vault.get_file(s, user, page.id)
+        return FileResponse(
+            path,
+            media_type=asset.content_type,
+            filename=node.title,
+            content_disposition_type="attachment",
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
+        )
     if page.is_folder:
         filename, data = await export_service.export_folder(s, user, page_id)
         media_type = "application/zip"

@@ -10,6 +10,7 @@ from app.api.routers import (
     auth,
     collab,
     comments,
+    files,
     links,
     pages,
     search,
@@ -61,6 +62,7 @@ for router in (
     pages.router,
     comments.router,
     attachments.router,
+    files.router,
     links.router,
     search.router,
 ):

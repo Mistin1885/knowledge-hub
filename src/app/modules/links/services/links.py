@@ -63,7 +63,7 @@ async def unlinked_mentions(s: AsyncSession, user: User, page_id: uuid.UUID) -> 
 
 
 async def orphans(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> list[Page]:
-    from app.shared.constants import Permission
+    from app.shared.constants import NodeType, Permission
 
     await policy.require_permission(s, user, workspace_id, Permission.READ)
     linked_as_source = select(PageLink.source_page_id)
@@ -74,6 +74,7 @@ async def orphans(s: AsyncSession, user: User, workspace_id: uuid.UUID) -> list[
             .where(
                 Page.workspace_id == workspace_id,
                 Page.is_folder.is_(False),
+                Page.node_type == NodeType.MARKDOWN,
                 Page.id.not_in(linked_as_source),
                 Page.id.not_in(linked_as_target),
                 policy.visible_pages_filter(user.id),

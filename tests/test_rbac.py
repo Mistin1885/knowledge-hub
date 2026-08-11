@@ -18,6 +18,12 @@ async def test_non_member_is_locked_out_everywhere(client, alice):
     page = (
         await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Doc"})
     ).json()
+    file_node = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/files",
+            files={"file": ("private.pdf", b"%PDF-1.7\nprivate", "application/pdf")},
+        )
+    ).json()
 
     await register_and_login(client, "outsider@test.com", "Outsider")
 
@@ -39,6 +45,8 @@ async def test_non_member_is_locked_out_everywhere(client, alice):
         f"/api/v1/pages/{page['id']}/comments",
         f"/api/v1/pages/{page['id']}/attachments",
         f"/api/v1/pages/{page['id']}/presence",
+        file_node["preview_url"],
+        file_node["download_url"],
     ]
     for url in surfaces:
         resp = await client.get(url)
@@ -54,6 +62,12 @@ async def test_non_member_is_locked_out_everywhere(client, alice):
     assert (await client.delete(f"/api/v1/pages/{page['id']}")).status_code == 404
     assert (
         await client.post(f"/api/v1/pages/{page['id']}/comments", json={"body_md": "hi"})
+    ).status_code == 404
+    assert (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/files",
+            files={"file": ("blocked.txt", b"no", "text/plain")},
+        )
     ).status_code == 404
 
     # workspace does not appear in their list

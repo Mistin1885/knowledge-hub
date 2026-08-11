@@ -20,6 +20,13 @@ collaboration + AI-agent access via MCP.
 
 ## Content model: markdown is canonical, Yjs is the live session
 
+- The `pages` table is also the workspace Vault tree. `node_type` distinguishes
+  `markdown`, `folder`, and `file`; all three share parent/position, visibility,
+  ownership, links, tags, and audit behavior.
+- File nodes have a one-to-one `file_assets` row containing the opaque storage
+  path, verified media type, size, and SHA-256. Existing attachments are
+  materialized as child file nodes by migration while their legacy URLs remain valid.
+
 - `pages.content_md` is the canonical document. Search, links, versions, MCP,
   and export all read markdown.
 - While a page is open, a Yjs doc (ProseMirror XmlFragment) is the live state,

@@ -10,6 +10,7 @@ import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { cn } from '../lib/utils';
 import CollabEditor from '../components/editor/CollabEditor';
 import FolderView from '../components/folder/FolderView';
+import FileView from '../components/vault/FileView';
 import CommentsSection from '../components/comments/CommentsSection';
 import RightSidebar from '../components/rightbar/RightSidebar';
 import { Dropdown } from '../components/ui/Dropdown';
@@ -149,7 +150,9 @@ export default function EditorPage() {
         <div className="mx-auto max-w-3xl px-8 py-8">
           {/* sibling keys must be unique — sharing page.id corrupts reconciliation */}
           <PageHeader key={`header:${page.id}`} page={page} canEdit={canEdit} />
-          {page.is_folder ? (
+          {page.node_type === 'file' ? (
+            <FileView key={`file:${page.id}`} page={page} />
+          ) : page.node_type === 'folder' || page.is_folder ? (
             <FolderView
               key={`folder:${page.id}`}
               page={page}

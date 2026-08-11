@@ -10,13 +10,11 @@ from app.modules.links.domain.parser import ParsedLink
 async def resolve_title(
     s: AsyncSession, workspace_id: uuid.UUID, title: str
 ) -> uuid.UUID | None:
-    """Earliest-created page with this title (case-insensitive) in the workspace."""
-    return await s.scalar(
-        select(Page.id)
-        .where(Page.workspace_id == workspace_id, func.lower(Page.title) == title.lower())
-        .order_by(Page.created_at)
-        .limit(1)
-    )
+    """Resolve a canonical vault path, path alias, or unique basename."""
+    from app.modules.pages.services import vault
+
+    node = await vault.resolve_target(s, workspace_id, title)
+    return node.id if node else None
 
 
 async def replace_links(
@@ -40,17 +38,18 @@ async def replace_links(
 
 
 async def resolve_pending_links_to(s: AsyncSession, page: Page) -> None:
-    """Point unresolved links matching this page's title at it (same workspace)."""
+    """Resolve pending title/path links that now point at ``page``."""
     source_ids = select(Page.id).where(Page.workspace_id == page.workspace_id)
-    await s.execute(
-        update(PageLink)
-        .where(
-            PageLink.target_page_id.is_(None),
-            func.lower(PageLink.target_title) == page.title.lower(),
-            PageLink.source_page_id.in_(source_ids),
+    pending = list(
+        await s.scalars(
+            select(PageLink).where(
+                PageLink.target_page_id.is_(None), PageLink.source_page_id.in_(source_ids)
+            )
         )
-        .values(target_page_id=page.id)
     )
+    for link in pending:
+        if await resolve_title(s, page.workspace_id, link.target_title) == page.id:
+            link.target_page_id = page.id
 
 
 async def unresolve_links_to(s: AsyncSession, page_id: uuid.UUID) -> None:

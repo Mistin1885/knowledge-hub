@@ -70,9 +70,22 @@ status ∈ draft|published|archived   visibility ∈ workspace|private
 
 ### Attachments
 
-- `POST /pages/{id}/attachments` multipart `file` → `201 {id, filename, content_type, size, url}` (`url = /api/v1/attachments/{id}/{filename}`)
+- `POST /pages/{id}/attachments` multipart `file` → compatibility upload that creates a Vault file node below the page
 - `GET /attachments/{id}/{filename}` → binary (auth required)
 - `GET /pages/{id}/attachments` → `[attachment]`
+
+### Vault files
+
+- `POST /workspaces/{id}/files?parent_id=` multipart `file` → first-class file node
+- File metadata is included in page/node responses: `node_type`, `content_type`, `size`, `created_at`, `preview_kind`, `preview_url`, `download_url`
+- `GET /files/{id}/preview` → inline PDF or validated raster image (auth required)
+- `GET /files/{id}/download` → forced attachment download (auth required)
+- `PATCH /pages/{id}` moves or renames file nodes using the existing `parent_id`, `position`, and `title` fields
+- `GET /workspaces/{id}/resolve?title=Folder/file.pdf` resolves canonical Vault paths and previous path aliases
+
+The default upload limit is 5 GiB (`KM_MAX_UPLOAD=5G`; legacy
+`KM_MAX_UPLOAD_MB=5120` is also supported). Other file types are
+stored and downloadable but are not rendered inline.
 
 ### Tags & metadata
 

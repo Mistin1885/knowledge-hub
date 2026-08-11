@@ -44,3 +44,17 @@ export function ancestorIds(pages: Page[], pageId: string): string[] {
   }
   return result;
 }
+
+/** Canonical slash-separated path used by Vault wikilinks. */
+export function vaultPath(pages: Page[], pageId: string): string {
+  const byId = new Map(pages.map((page) => [page.id, page]));
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  let current = byId.get(pageId);
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    parts.unshift(current.title || 'Untitled');
+    current = current.parent_id ? byId.get(current.parent_id) : undefined;
+  }
+  return parts.join('/');
+}

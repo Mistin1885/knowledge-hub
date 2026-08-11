@@ -44,6 +44,7 @@ class PageOut(BaseModel):
     visibility: str
     position: float
     is_folder: bool
+    node_type: str
     owner: UserRef | None
     tags: list[str]
     metadata: dict[str, str]
@@ -51,6 +52,11 @@ class PageOut(BaseModel):
     updated_by: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    content_type: str | None = None
+    size: int | None = None
+    preview_kind: str | None = None
+    preview_url: str | None = None
+    download_url: str | None = None
 
 
 class PageDetailOut(PageOut):
@@ -114,6 +120,10 @@ class AttachmentOut(BaseModel):
     content_type: str
     size: int
     url: str
+    created_at: datetime
+    preview_kind: str | None = None
+    preview_url: str | None = None
+    download_url: str
 
 
 class ShareOut(BaseModel):

@@ -6,7 +6,7 @@ from app.infra.db.models import User
 from app.modules.links.infra import repo
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.workspaces.services import policy
-from app.shared.constants import Permission
+from app.shared.constants import NodeType, Permission
 
 
 async def workspace_graph(
@@ -25,11 +25,13 @@ async def workspace_graph(
             "title": p.title,
             "icon": p.icon,
             "status": p.status,
+            "node_type": p.node_type,
             "is_tag": False,
             "link_count": degree.get(p.id, 0),
         }
         for p in visible
-        if not p.is_folder or degree.get(p.id, 0) > 0
+        if (not p.is_folder or degree.get(p.id, 0) > 0)
+        and (p.node_type != NodeType.FILE or degree.get(p.id, 0) > 0)
     ]
     edges = [
         {"source": str(link.source_page_id), "target": str(link.target_page_id), "kind": "link"}
@@ -50,6 +52,7 @@ async def workspace_graph(
                     "title": f"#{tag_name}",
                     "icon": None,
                     "status": None,
+                    "node_type": None,
                     "is_tag": True,
                     "link_count": count,
                 }

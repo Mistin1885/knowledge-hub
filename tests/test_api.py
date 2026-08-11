@@ -365,6 +365,79 @@ async def test_attachment_upload_roundtrip(client, alice):
     resp = await client.get(att["url"])
     assert resp.status_code == 200
     assert resp.content == png
+    listed = (await client.get(f"/api/v1/pages/{page['id']}/attachments")).json()
+    assert [item["id"] for item in listed] == [att["id"]]
+    assert listed[0]["created_at"]
+
+
+async def test_vault_file_nodes_preview_download_move_and_alias(client, alice):
+    ws = await make_workspace(client)
+    wid = ws["id"]
+    folder = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages",
+            json={"title": "Design", "is_folder": True},
+        )
+    ).json()
+
+    pdf = b"%PDF-1.7\n" + b"vault-pdf" * 8
+    resp = await client.post(
+        f"/api/v1/workspaces/{wid}/files?parent_id={folder['id']}",
+        files={"file": ("spec.pdf", pdf, "application/octet-stream")},
+    )
+    assert resp.status_code == 201, resp.text
+    node = resp.json()
+    assert node["node_type"] == "file"
+    assert node["parent_id"] == folder["id"]
+    assert node["content_type"] == "application/pdf"
+    assert node["size"] == len(pdf)
+    assert node["preview_kind"] == "pdf"
+    assert node["created_at"]
+
+    preview = await client.get(node["preview_url"])
+    assert preview.status_code == 200
+    assert preview.content == pdf
+    assert preview.headers["content-disposition"].startswith("inline")
+    assert preview.headers["x-content-type-options"] == "nosniff"
+
+    download = await client.get(node["download_url"])
+    assert download.status_code == 200
+    assert download.content == pdf
+    assert download.headers["content-disposition"].startswith("attachment")
+
+    resolved = await client.get(
+        f"/api/v1/workspaces/{wid}/resolve", params={"title": "Design/spec.pdf"}
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["id"] == node["id"]
+
+    # Folder rename records aliases for the whole subtree, so old links stay valid.
+    renamed = await client.patch(f"/api/v1/pages/{folder['id']}", json={"title": "Product"})
+    assert renamed.status_code == 200
+    old_path = await client.get(
+        f"/api/v1/workspaces/{wid}/resolve", params={"title": "Design/spec.pdf"}
+    )
+    assert old_path.json()["id"] == node["id"]
+    new_path = await client.get(
+        f"/api/v1/workspaces/{wid}/resolve", params={"title": "Product/spec.pdf"}
+    )
+    assert new_path.json()["id"] == node["id"]
+
+
+async def test_non_previewable_vault_file_metadata_and_download(client, alice):
+    ws = await make_workspace(client)
+    payload = b"PK\x03\x04not-really-a-zip"
+    resp = await client.post(
+        f"/api/v1/workspaces/{ws['id']}/files",
+        files={"file": ("archive.zip", payload, "application/zip")},
+    )
+    assert resp.status_code == 201, resp.text
+    node = resp.json()
+    assert node["preview_kind"] is None
+    assert node["preview_url"] is None
+    assert node["size"] == len(payload)
+    assert (await client.get(f"/api/v1/files/{node['id']}/preview")).status_code == 422
+    assert (await client.get(node["download_url"])).content == payload
 
 
 async def test_huge_document_write_and_tail_search(client, alice):

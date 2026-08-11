@@ -21,8 +21,9 @@ async def save(
     s: AsyncSession, user: User, page_id: uuid.UUID, filename: str, content_type: str, data: bytes
 ) -> Attachment:
     page = await pages_service.get_for_edit(s, user, page_id)
-    if len(data) > settings.max_upload_mb * 1024 * 1024:
-        raise ValidationFailedError(f"File exceeds {settings.max_upload_mb} MB limit")
+    if len(data) > settings.max_upload_bytes:
+        configured_limit = settings.max_upload or f"{settings.max_upload_mb}M"
+        raise ValidationFailedError(f"File exceeds {configured_limit} limit")
     filename = _safe_filename(filename)
     rel_dir = Path(str(page.workspace_id))
     disk_dir = settings.uploads_dir / rel_dir

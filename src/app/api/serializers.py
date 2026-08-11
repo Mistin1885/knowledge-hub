@@ -6,12 +6,15 @@ from app.api.schemas.pages import PageDetailOut, PageOut
 from app.infra.db.models import Page, User
 from app.modules.links.services import links as links_service
 from app.modules.pages.infra import repo as pages_repo
+from app.modules.pages.services import vault
 
 
 async def page_out(s: AsyncSession, page: Page) -> PageOut:
     # explicit fetch instead of the lazy relationship: pages arrive here from
     # arbitrary queries and lazy-loading is unavailable under asyncio
     owner = await s.get(User, page.owner_id) if page.owner_id else None
+    asset = await pages_repo.get_file_asset(s, page.id) if page.node_type == "file" else None
+    preview_kind = vault.preview_kind_for_content_type(asset.content_type) if asset else None
     return PageOut(
         id=page.id,
         workspace_id=page.workspace_id,
@@ -22,6 +25,7 @@ async def page_out(s: AsyncSession, page: Page) -> PageOut:
         visibility=page.visibility,
         position=page.position,
         is_folder=page.is_folder,
+        node_type=page.node_type,
         owner={"id": owner.id, "name": owner.name} if owner else None,
         tags=await pages_repo.get_page_tags(s, page.id),
         metadata=await pages_repo.get_page_metadata(s, page.id),
@@ -29,6 +33,11 @@ async def page_out(s: AsyncSession, page: Page) -> PageOut:
         updated_by=page.updated_by,
         created_at=page.created_at,
         updated_at=page.updated_at,
+        content_type=asset.content_type if asset else None,
+        size=asset.size if asset else None,
+        preview_kind=preview_kind,
+        preview_url=f"/api/v1/files/{page.id}/preview" if preview_kind else None,
+        download_url=f"/api/v1/files/{page.id}/download" if asset else None,
     )
 
 

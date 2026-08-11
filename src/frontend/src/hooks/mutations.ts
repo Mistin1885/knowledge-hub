@@ -9,7 +9,7 @@ import {
   type CreateWorkspaceInput,
   type UpdatePageInput,
 } from '../api/endpoints';
-import type { Role } from '../api/types';
+import type { Page, Role } from '../api/types';
 
 export function useCreateWorkspace() {
   const qc = useQueryClient();
@@ -53,6 +53,29 @@ export function useDeletePage(workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
       qc.invalidateQueries({ queryKey: ['children'] });
+    },
+  });
+}
+
+export function useUploadFiles(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ files, parentId }: { files: File[]; parentId?: string | null }) => {
+      const uploaded = [];
+      for (const file of files) uploaded.push(await pageApi.uploadFile(workspaceId, file, parentId));
+      return uploaded;
+    },
+    onSuccess: (uploaded) => {
+      // The API commits its request-scoped transaction while the response is
+      // being finalized. An immediate refetch can therefore observe the old
+      // tree and hide a successful upload. Merge the authoritative response
+      // into the flat Vault cache and let later navigation refresh naturally.
+      qc.setQueryData<Page[]>(['pages', workspaceId], (current = []) => {
+        const uploadedIds = new Set(uploaded.map((page) => page.id));
+        return [...current.filter((page) => !uploadedIds.has(page.id)), ...uploaded];
+      });
+      for (const page of uploaded) qc.setQueryData(['page', page.id], page);
+      qc.invalidateQueries({ queryKey: ['children'], refetchType: 'none' });
     },
   });
 }

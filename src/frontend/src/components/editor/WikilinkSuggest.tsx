@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { File, FileImage, FileText, Folder } from 'lucide-react';
 import type { Page } from '../../api/types';
 import { cn } from '../../lib/utils';
+import { vaultPath } from '../../lib/tree';
 import type { WikilinkAutocompleteState } from './wikilinks';
 
 export default function WikilinkSuggest({
@@ -14,7 +15,7 @@ export default function WikilinkSuggest({
   state: WikilinkAutocompleteState;
   pages: Page[];
   keyHandler: { current: ((event: KeyboardEvent) => boolean) | null };
-  onPick: (title: string) => void;
+  onPick: (page: Page) => void;
   onDismiss: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -22,9 +23,9 @@ export default function WikilinkSuggest({
   const filtered = useMemo(() => {
     const q = state.query.trim().toLowerCase();
     const matches = q
-      ? pages.filter((p) => p.title.toLowerCase().includes(q))
+      ? pages.filter((p) => vaultPath(pages, p.id).toLowerCase().includes(q))
       : pages.slice();
-    matches.sort((a, b) => a.title.localeCompare(b.title));
+    matches.sort((a, b) => vaultPath(pages, a.id).localeCompare(vaultPath(pages, b.id)));
     return matches.slice(0, 8);
   }, [pages, state.query]);
 
@@ -43,7 +44,7 @@ export default function WikilinkSuggest({
       if (event.key === 'Enter') {
         const page = filtered[index];
         if (page) {
-          onPick(page.title);
+          onPick(page);
           return true;
         }
         return false;
@@ -74,7 +75,7 @@ export default function WikilinkSuggest({
           key={page.id}
           onMouseDown={(e) => {
             e.preventDefault();
-            onPick(page.title);
+            onPick(page);
           }}
           onMouseEnter={() => setIndex(i)}
           className={cn(
@@ -84,10 +85,19 @@ export default function WikilinkSuggest({
         >
           {page.icon ? (
             <span className="w-4 flex-none text-center leading-none">{page.icon}</span>
+          ) : page.node_type === 'folder' ? (
+            <Folder size={13} className="flex-none text-neutral-400" />
+          ) : page.preview_kind === 'image' ? (
+            <FileImage size={13} className="flex-none text-neutral-400" />
+          ) : page.node_type === 'file' ? (
+            <File size={13} className="flex-none text-neutral-400" />
           ) : (
             <FileText size={13} className="flex-none text-neutral-400" />
           )}
-          <span className="truncate">{page.title}</span>
+          <span className="min-w-0 flex-1 truncate">{page.title}</span>
+          <span className="max-w-28 truncate text-[10px] text-neutral-400">
+            {vaultPath(pages, page.id).split('/').slice(0, -1).join('/')}
+          </span>
         </button>
       ))}
     </div>

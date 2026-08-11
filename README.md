@@ -19,6 +19,8 @@ Docker 相關檔案集中在 `deploy/`。Compose 預設會把系統資料 bind-m
 
 - `data/postgres/`：PostgreSQL/pgvector（使用者建立的 pages、folders、comments、workspaces、users、indexes）
 - `data/uploads/`：附件/上傳檔案
+- 左側 Vault tree 可混合顯示 Markdown、資料夾、圖片、PDF 與其他檔案；檔案可移動、以 wikilink 連結及下載
+- PDF 與安全的 raster image 支援登入後網頁預覽；其他格式顯示 metadata 後下載
 
 因此服務重啟或 container 重建時，使用者建立的資料不會遺失。
 
