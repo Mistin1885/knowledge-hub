@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 
 from app.api import serializers
 from app.api.deps import DB, CurrentUser
-from app.api.schemas.pages import PageOut
+from app.api.schemas.pages import PageOut, VaultImportOut
 from app.modules.pages.services import vault
 from app.shared.exceptions import ValidationFailedError
 
@@ -28,6 +28,35 @@ async def upload_file(
         s, user, workspace_id, file, parent_id=parent_id
     )
     return await serializers.page_out(s, node)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/import",
+    response_model=VaultImportOut,
+    status_code=status.HTTP_200_OK,
+)
+async def import_vault_item(
+    workspace_id: uuid.UUID,
+    file: UploadFile,
+    user: CurrentUser,
+    s: DB,
+    relative_path: str = Query(..., min_length=1, max_length=4000),
+    parent_id: uuid.UUID | None = Query(None),
+):
+    action, node, folders_created, warnings = await vault.import_vault_item(
+        s,
+        user,
+        workspace_id,
+        file,
+        relative_path=relative_path,
+        base_parent_id=parent_id,
+    )
+    return VaultImportOut(
+        action=action,
+        page=await serializers.page_out(s, node),
+        folders_created=folders_created,
+        warnings=warnings,
+    )
 
 
 @router.get("/files/{node_id}/preview")

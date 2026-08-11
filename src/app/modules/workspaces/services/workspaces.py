@@ -79,6 +79,23 @@ async def list_members(
     return await repo.list_members(s, workspace_id)
 
 
+async def list_user_directory(
+    s: AsyncSession,
+    user: User,
+    workspace_id: uuid.UUID,
+    *,
+    page: int,
+    page_size: int,
+) -> tuple[list[tuple[User, WorkspaceMember | None]], int]:
+    await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
+    return await repo.list_user_directory(
+        s,
+        workspace_id,
+        offset=(page - 1) * page_size,
+        limit=page_size,
+    )
+
+
 async def add_member(
     s: AsyncSession, user: User, workspace_id: uuid.UUID, email: str, role: Role
 ) -> WorkspaceMember:

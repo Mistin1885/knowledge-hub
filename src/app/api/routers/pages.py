@@ -10,11 +10,13 @@ from app.api.schemas.pages import (
     MetadataKeyOut,
     PageCreateIn,
     PageDetailOut,
+    PageMoveIn,
     PageOut,
     PageUpdateIn,
     ShareIn,
     ShareOut,
     TagOut,
+    VaultTreeNodeOut,
     VersionDetailOut,
     VersionOut,
 )
@@ -32,7 +34,70 @@ router = APIRouter(tags=["pages"])
 @router.get("/workspaces/{workspace_id}/pages", response_model=list[PageOut])
 async def list_pages(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
     pages = await pages_service.list_workspace(s, user, workspace_id)
-    return [await serializers.page_out(s, p) for p in pages]
+    counts = pages_repo.folder_file_counts(pages)
+    return await serializers.pages_out(s, pages, file_counts=counts)
+
+
+@router.get("/workspaces/{workspace_id}/tree", response_model=list[VaultTreeNodeOut])
+async def vault_tree_level(
+    workspace_id: uuid.UUID,
+    user: CurrentUser,
+    s: DB,
+    parent_id: uuid.UUID | None = None,
+):
+    await policy.require_permission(s, user, workspace_id, Permission.READ)
+    if parent_id is not None:
+        parent = await pages_service.get_for_read(s, user, parent_id)
+        if parent.workspace_id != workspace_id or parent.node_type == NodeType.FILE:
+            from app.shared.exceptions import NotFoundError
+
+            raise NotFoundError("Folder not found")
+    visibility = policy.visible_pages_filter(user.id)
+    pages = await pages_repo.list_tree_level(s, workspace_id, parent_id, visibility)
+    structure = await pages_repo.tree_structure(s, workspace_id, visibility)
+    counts, parents_with_children = pages_repo.folder_file_counts_from_rows(structure)
+    visible_ids = {node_id for node_id, *_rest in structure}
+    parent_overrides = (
+        {
+            page.id: None
+            for page in pages
+            if page.parent_id is not None and page.parent_id not in visible_ids
+        }
+        if parent_id is None
+        else None
+    )
+    return await serializers.vault_tree_nodes_out(
+        s,
+        pages,
+        file_counts=counts,
+        parents_with_children=parents_with_children,
+        parent_overrides=parent_overrides,
+    )
+
+
+@router.get("/pages/{page_id}/ancestors", response_model=list[VaultTreeNodeOut])
+async def page_ancestors(page_id: uuid.UUID, user: CurrentUser, s: DB):
+    page = await pages_service.get_for_read(s, user, page_id)
+    ancestors = []
+    seen = {page.id}
+    parent_id = page.parent_id
+    while parent_id is not None and parent_id not in seen:
+        seen.add(parent_id)
+        parent = await pages_repo.get(s, parent_id)
+        if parent is None or not await policy.can_read_page(s, user, parent):
+            break
+        ancestors.append(parent)
+        parent_id = parent.parent_id
+    ancestors.reverse()
+    visibility = policy.visible_pages_filter(user.id)
+    structure = await pages_repo.tree_structure(s, page.workspace_id, visibility)
+    counts, parents_with_children = pages_repo.folder_file_counts_from_rows(structure)
+    return await serializers.vault_tree_nodes_out(
+        s,
+        ancestors,
+        file_counts=counts,
+        parents_with_children=parents_with_children,
+    )
 
 
 @router.post(
@@ -72,6 +137,12 @@ async def get_page(page_id: uuid.UUID, user: CurrentUser, s: DB):
 async def update_page(page_id: uuid.UUID, body: PageUpdateIn, user: CurrentUser, s: DB):
     fields = body.model_dump(exclude_unset=True)
     page = await pipeline.update_page(s, user, page_id, fields)
+    return await serializers.page_detail_out(s, page)
+
+
+@router.patch("/pages/{page_id}/move", response_model=PageDetailOut)
+async def move_page(page_id: uuid.UUID, body: PageMoveIn, user: CurrentUser, s: DB):
+    page = await pipeline.move_page(s, user, page_id, body.parent_id, body.before_id)
     return await serializers.page_detail_out(s, page)
 
 

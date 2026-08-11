@@ -8,6 +8,7 @@ import type {
   CreatedApiToken,
   GraphData,
   Member,
+  MemberDirectoryPage,
   MentionItem,
   Page,
   PageDetail,
@@ -24,6 +25,7 @@ import type {
   TagInfo,
   UnlinkedMention,
   User,
+  VaultTreeNode,
   Workspace,
 } from './types';
 
@@ -71,19 +73,29 @@ export const workspaceApi = {
     http.patch<Workspace>(`/workspaces/${id}`, data),
   remove: (id: string) => http.delete(`/workspaces/${id}`),
   members: (id: string) => http.get<Member[]>(`/workspaces/${id}/members`),
+  memberDirectory: (id: string, page: number) =>
+    http.get<MemberDirectoryPage>(
+      `/workspaces/${id}/member-directory?page=${encodeURIComponent(page)}&page_size=20`,
+    ),
   addMember: (id: string, email: string, role: Role) =>
     http.post<Member>(`/workspaces/${id}/members`, { email, role }),
   updateMember: (id: string, userId: string, role: Role) =>
     http.patch<Member>(`/workspaces/${id}/members/${userId}`, { role }),
   removeMember: (id: string, userId: string) => http.delete(`/workspaces/${id}/members/${userId}`),
-  audit: (id: string, cursor?: string) =>
+  audit: (id: string, page: number) =>
     http.get<AuditResponse>(
-      `/workspaces/${id}/audit?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      `/workspaces/${id}/audit?page=${encodeURIComponent(page)}&page_size=20`,
     ),
   pages: (id: string) => http.get<Page[]>(`/workspaces/${id}/pages`),
+  tree: (id: string, parentId: string | null = null) => {
+    const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : '';
+    return http.get<VaultTreeNode[]>(`/workspaces/${id}/tree${query}`);
+  },
   tags: (id: string) => http.get<TagInfo[]>(`/workspaces/${id}/tags`),
-  graph: (id: string, withTags: boolean) =>
-    http.get<GraphData>(`/workspaces/${id}/graph?tags=${withTags ? 1 : 0}`),
+  graph: (id: string, withTags: boolean, limit = 100) =>
+    http.get<GraphData>(
+      `/workspaces/${id}/graph?tags=${withTags ? 1 : 0}&limit=${encodeURIComponent(limit)}`,
+    ),
   orphans: (id: string) => http.get<Page[]>(`/workspaces/${id}/orphans`),
   exportUrl: (id: string) => `/api/v1/workspaces/${id}/export`,
   search: (id: string, params: SearchParams) =>
@@ -122,12 +134,25 @@ export interface UpdatePageInput {
   is_folder?: boolean;
 }
 
+export interface ImportItemResult {
+  action: 'created' | 'updated' | 'skipped';
+  page: Page;
+  folders_created: number;
+  warnings: string[];
+}
+
 export const pageApi = {
+  ancestors: (id: string) => http.get<VaultTreeNode[]>(`/pages/${id}/ancestors`),
   children: (id: string) => http.get<ChildPage[]>(`/pages/${id}/children`),
   create: (workspaceId: string, data: CreatePageInput) =>
     http.post<PageDetail>(`/workspaces/${workspaceId}/pages`, data),
   get: (id: string) => http.get<PageDetail>(`/pages/${id}`),
   update: (id: string, data: UpdatePageInput) => http.patch<PageDetail>(`/pages/${id}`, data),
+  move: (id: string, parentId: string | null, beforeId: string | null) =>
+    http.patch<PageDetail>(`/pages/${id}/move`, {
+      parent_id: parentId,
+      before_id: beforeId,
+    }),
   remove: (id: string) => http.delete(`/pages/${id}`),
   exportUrl: (id: string) => `/api/v1/pages/${id}/export`,
   versions: (id: string) => http.get<PageVersion[]>(`/pages/${id}/versions`),
@@ -153,6 +178,21 @@ export const pageApi = {
     form.append('file', file, file.name);
     const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : '';
     return request<Page>(`/workspaces/${workspaceId}/files${query}`, {
+      method: 'POST',
+      body: form,
+    });
+  },
+  importItem: (
+    workspaceId: string,
+    file: File,
+    relativePath: string,
+    parentId?: string | null,
+  ) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const params = new URLSearchParams({ relative_path: relativePath });
+    if (parentId) params.set('parent_id', parentId);
+    return request<ImportItemResult>(`/workspaces/${workspaceId}/import?${params}`, {
       method: 'POST',
       body: form,
     });

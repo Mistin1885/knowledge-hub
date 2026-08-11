@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Query, Response, status
 
@@ -8,6 +7,8 @@ from app.api.schemas.workspaces import (
     AuditEntryOut,
     AuditPageOut,
     MemberAddIn,
+    MemberDirectoryItemOut,
+    MemberDirectoryPageOut,
     MemberOut,
     MemberUpdateIn,
     WorkspaceCreateIn,
@@ -80,9 +81,42 @@ async def list_members(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
             user_id=m.user_id, email=m.user.email, name=m.user.name,
             role=Role(m.role), permissions=role_permissions(Role(m.role)),
             joined_at=m.joined_at,
+            last_login_at=m.user.last_login_at,
         )
         for m in await workspaces.list_members(s, user, workspace_id)
     ]
+
+
+@router.get("/{workspace_id}/member-directory", response_model=MemberDirectoryPageOut)
+async def member_directory(
+    workspace_id: uuid.UUID,
+    user: CurrentUser,
+    s: DB,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+):
+    rows, total = await workspaces.list_user_directory(
+        s, user, workspace_id, page=page, page_size=page_size
+    )
+    return MemberDirectoryPageOut(
+        items=[
+            MemberDirectoryItemOut(
+                user_id=entry.id,
+                email=entry.email,
+                name=entry.name,
+                role=Role(membership.role) if membership else None,
+                permissions=(
+                    role_permissions(Role(membership.role)) if membership else []
+                ),
+                joined_at=membership.joined_at if membership else None,
+                last_login_at=entry.last_login_at,
+            )
+            for entry, membership in rows
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 @router.post("/{workspace_id}/members", status_code=status.HTTP_201_CREATED)
@@ -115,11 +149,16 @@ async def audit_log(
     workspace_id: uuid.UUID,
     user: CurrentUser,
     s: DB,
-    limit: int = Query(default=50, le=200),
-    cursor: datetime | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
 ):
     await policy.require_permission(s, user, workspace_id, Permission.MANAGE)
-    entries = await audit_repo.list_for_workspace(s, workspace_id, limit=limit, before=cursor)
+    entries = await audit_repo.list_for_workspace(
+        s,
+        workspace_id,
+        limit=page_size,
+        offset=(page - 1) * page_size,
+    )
     items = [
         AuditEntryOut(
             id=e.id,
@@ -129,5 +168,9 @@ async def audit_log(
         )
         for e in entries
     ]
-    next_cursor = items[-1].created_at.isoformat() if len(items) == limit else None
-    return AuditPageOut(items=items, next_cursor=next_cursor)
+    return AuditPageOut(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=await audit_repo.count_for_workspace(s, workspace_id),
+    )

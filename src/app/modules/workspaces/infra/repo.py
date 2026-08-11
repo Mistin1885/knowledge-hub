@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -59,6 +59,39 @@ async def list_members(s: AsyncSession, workspace_id: uuid.UUID) -> list[Workspa
             .order_by(WorkspaceMember.joined_at)
         )
     )
+
+
+async def list_user_directory(
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    *,
+    offset: int,
+    limit: int,
+) -> tuple[list[tuple[User, WorkspaceMember | None]], int]:
+    """All registered users with their optional membership in one workspace."""
+    membership = WorkspaceMember
+    join_condition = and_(
+        membership.user_id == User.id,
+        membership.workspace_id == workspace_id,
+    )
+    total = (await s.scalar(select(func.count(User.id)))) or 0
+    rows = await s.execute(
+        select(User, membership)
+        .outerjoin(membership, join_condition)
+        .order_by(
+            case(
+                (membership.role == "owner", 0),
+                (membership.role.is_not(None), 1),
+                else_=2,
+            ),
+            func.lower(User.name),
+            func.lower(User.email),
+            User.id,
+        )
+        .offset(offset)
+        .limit(limit)
+    )
+    return [(row[0], row[1]) for row in rows], total
 
 
 async def add_member(

@@ -30,22 +30,42 @@ export interface Member {
   role: Role;
   permissions: ('read' | 'write' | 'manage' | 'own')[];
   joined_at: string;
+  last_login_at: string | null;
+}
+
+export interface MemberDirectoryEntry {
+  user_id: string;
+  email: string;
+  name: string;
+  role: Role | null;
+  permissions: ('read' | 'write' | 'manage' | 'own')[];
+  joined_at: string | null;
+  last_login_at: string | null;
+}
+
+export interface MemberDirectoryPage {
+  items: MemberDirectoryEntry[];
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export interface AuditItem {
   id: string;
-  actor: UserRef;
+  actor: UserRef | null;
   action: string;
   target_type: string;
-  target_id: string;
+  target_id: string | null;
   target_title: string | null;
-  detail: string | null;
+  detail: Record<string, unknown> | null;
   created_at: string;
 }
 
 export interface AuditResponse {
   items: AuditItem[];
-  next_cursor: string | null;
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export type PageStatus = 'draft' | 'published' | 'archived';
@@ -75,6 +95,23 @@ export interface Page {
   preview_kind: 'image' | 'pdf' | null;
   preview_url: string | null;
   download_url: string | null;
+  file_count: number | null;
+}
+
+export interface VaultTreeNode {
+  id: string;
+  workspace_id: string;
+  parent_id: string | null;
+  title: string;
+  icon: string | null;
+  status: PageStatus;
+  visibility: PageVisibility;
+  position: number;
+  is_folder: boolean;
+  node_type: NodeType;
+  preview_kind: 'image' | 'pdf' | null;
+  file_count: number | null;
+  has_children: boolean;
 }
 
 export interface PageDetail extends Page {

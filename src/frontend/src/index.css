@@ -219,6 +219,28 @@ body {
   @apply max-w-full rounded-md border border-neutral-200;
 }
 
+.km-editor .ProseMirror .tableWrapper {
+  @apply my-4 overflow-x-auto;
+}
+
+.km-editor .ProseMirror table {
+  @apply w-full border-collapse text-sm;
+}
+
+.km-editor .ProseMirror th,
+.km-editor .ProseMirror td {
+  @apply min-w-24 border border-neutral-300 px-3 py-2 align-top;
+}
+
+.km-editor .ProseMirror th {
+  @apply bg-neutral-100 text-left font-semibold text-neutral-800;
+}
+
+.km-editor .ProseMirror th > p,
+.km-editor .ProseMirror td > p {
+  margin: 0;
+}
+
 .km-editor .ProseMirror a {
   @apply text-indigo-600 underline decoration-indigo-300 underline-offset-2;
 }

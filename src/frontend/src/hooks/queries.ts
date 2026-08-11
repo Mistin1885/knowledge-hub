@@ -1,4 +1,4 @@
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   authApi,
   mentionApi,
@@ -20,6 +20,26 @@ export function usePages(workspaceId: string | undefined) {
     queryKey: ['pages', workspaceId],
     queryFn: () => workspaceApi.pages(workspaceId!),
     enabled: !!workspaceId,
+  });
+}
+
+export function useVaultTree(
+  workspaceId: string,
+  parentId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['vault-tree', workspaceId, parentId ?? 'root'],
+    queryFn: () => workspaceApi.tree(workspaceId, parentId),
+    enabled,
+  });
+}
+
+export function usePageAncestors(pageId: string | null) {
+  return useQuery({
+    queryKey: ['page-ancestors', pageId],
+    queryFn: () => pageApi.ancestors(pageId!),
+    enabled: !!pageId,
   });
 }
 
@@ -46,10 +66,10 @@ export function useTags(workspaceId: string | undefined) {
   });
 }
 
-export function useGraph(workspaceId: string, withTags: boolean) {
+export function useGraph(workspaceId: string, withTags: boolean, limit = 100) {
   return useQuery({
-    queryKey: ['graph', workspaceId, withTags],
-    queryFn: () => workspaceApi.graph(workspaceId, withTags),
+    queryKey: ['graph', workspaceId, withTags, limit],
+    queryFn: () => workspaceApi.graph(workspaceId, withTags, limit),
     placeholderData: keepPreviousData,
   });
 }
@@ -120,19 +140,28 @@ export function useShares(pageId: string, enabled: boolean) {
   });
 }
 
-export function useMembers(workspaceId: string) {
+export function useMembers(workspaceId: string, enabled = true) {
   return useQuery({
     queryKey: ['members', workspaceId],
     queryFn: () => workspaceApi.members(workspaceId),
+    enabled,
   });
 }
 
-export function useAudit(workspaceId: string) {
-  return useInfiniteQuery({
-    queryKey: ['audit', workspaceId],
-    queryFn: ({ pageParam }) => workspaceApi.audit(workspaceId, pageParam),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => last.next_cursor ?? undefined,
+export function useMemberDirectory(workspaceId: string, page: number, enabled = true) {
+  return useQuery({
+    queryKey: ['member-directory', workspaceId, page],
+    queryFn: () => workspaceApi.memberDirectory(workspaceId, page),
+    enabled,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAudit(workspaceId: string, page: number) {
+  return useQuery({
+    queryKey: ['audit', workspaceId, page],
+    queryFn: () => workspaceApi.audit(workspaceId, page),
+    placeholderData: keepPreviousData,
   });
 }
 

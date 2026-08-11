@@ -28,6 +28,7 @@ export function useCreatePage(workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
     },
   });
 }
@@ -41,6 +42,7 @@ export function useUpdatePage(pageId: string, workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
     },
   });
 }
@@ -53,6 +55,7 @@ export function useDeletePage(workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
     },
   });
 }
@@ -72,10 +75,38 @@ export function useUploadFiles(workspaceId: string) {
       // into the flat Vault cache and let later navigation refresh naturally.
       qc.setQueryData<Page[]>(['pages', workspaceId], (current = []) => {
         const uploadedIds = new Set(uploaded.map((page) => page.id));
-        return [...current.filter((page) => !uploadedIds.has(page.id)), ...uploaded];
+        const byId = new Map(current.map((page) => [page.id, page]));
+        const increments = new Map<string, number>();
+        for (const item of uploaded) {
+          let parentId = item.parent_id;
+          const seen = new Set<string>();
+          while (parentId && !seen.has(parentId)) {
+            seen.add(parentId);
+            const parent = byId.get(parentId);
+            if (!parent) break;
+            if (parent.node_type === 'folder' || parent.is_folder) {
+              increments.set(parent.id, (increments.get(parent.id) ?? 0) + 1);
+            }
+            parentId = parent.parent_id;
+          }
+        }
+        return [
+          ...current
+            .filter((page) => !uploadedIds.has(page.id))
+            .map((page) =>
+              increments.has(page.id)
+                ? { ...page, file_count: (page.file_count ?? 0) + (increments.get(page.id) ?? 0) }
+                : page,
+            ),
+          ...uploaded,
+        ];
       });
       for (const page of uploaded) qc.setQueryData(['page', page.id], page);
       qc.invalidateQueries({ queryKey: ['children'], refetchType: 'none' });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
+      window.setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
+      }, 300);
     },
   });
 }
@@ -138,7 +169,12 @@ export function useAddMember(workspaceId: string) {
   return useMutation({
     mutationFn: ({ email, role }: { email: string; role: Role }) =>
       workspaceApi.addMember(workspaceId, email, role),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['member-directory', workspaceId] }),
+      ]);
+    },
   });
 }
 
@@ -147,7 +183,13 @@ export function useUpdateMember(workspaceId: string) {
   return useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: Role }) =>
       workspaceApi.updateMember(workspaceId, userId, role),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['member-directory', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['workspaces'] }),
+      ]);
+    },
   });
 }
 
@@ -155,7 +197,13 @@ export function useRemoveMember(workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) => workspaceApi.removeMember(workspaceId, userId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['member-directory', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['workspaces'] }),
+      ]);
+    },
   });
 }
 

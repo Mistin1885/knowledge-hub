@@ -93,6 +93,8 @@ async def update_page(s: AsyncSession, user: User, page_id: uuid.UUID, fields: d
     )
     content_changed, title_changed = await pages_service.apply_update(s, user, page, fields)
     if content_changed or title_changed:
+        if content_changed:
+            await pages_repo.delete_collab_state(s, page.id)
         await index_page(s, page, title_changed=title_changed)
         if page.node_type != NodeType.FILE:
             await pages_repo.add_version(s, page, user.id)
@@ -114,6 +116,49 @@ async def update_page(s: AsyncSession, user: User, page_id: uuid.UUID, fields: d
     return page
 
 
+async def move_page(
+    s: AsyncSession,
+    user: User,
+    page_id: uuid.UUID,
+    parent_id: uuid.UUID | None,
+    before_id: uuid.UUID | None,
+) -> Page:
+    """Atomically move/reorder one tree node and rebalance sibling positions."""
+    page = await pages_service.get_for_edit(s, user, page_id)
+    await pages_repo.lock_workspace_tree(s, page.workspace_id)
+
+    if parent_id is not None:
+        parent = await pages_service.get_for_edit(s, user, parent_id)
+        if parent.workspace_id != page.workspace_id or parent.node_type == NodeType.FILE:
+            from app.shared.exceptions import ValidationFailedError
+
+            raise ValidationFailedError("Destination folder is not available")
+
+    if before_id == page.id:
+        before_id = None
+
+    # Reuse the regular update pipeline so cycle checks, aliases, link
+    # resolution and audit history remain identical to drag-moves and PATCHes.
+    page = await update_page(s, user, page_id, {"parent_id": parent_id})
+    siblings = await pages_repo.list_siblings(s, page.workspace_id, parent_id)
+    ordered = [item for item in siblings if item.id != page.id]
+
+    if before_id is None:
+        ordered.append(page)
+    else:
+        before = next((item for item in ordered if item.id == before_id), None)
+        if before is None:
+            from app.shared.exceptions import ValidationFailedError
+
+            raise ValidationFailedError("Reorder target is not in the destination folder")
+        ordered.insert(ordered.index(before), page)
+
+    for position, sibling in enumerate(ordered, start=1):
+        sibling.position = float(position)
+    await s.flush()
+    return page
+
+
 async def delete_page(s: AsyncSession, user: User, page_id: uuid.UUID) -> None:
     page = await pages_service.get_for_edit(s, user, page_id)
     # keep inbound links as unresolved instead of cascade-deleting backlink rows
@@ -125,12 +170,17 @@ async def restore_version(
     s: AsyncSession, user: User, page_id: uuid.UUID, version_id: uuid.UUID
 ) -> Page:
     from app.modules.audit.services import audit
+    from app.modules.collab.services import rooms
+    from app.shared.exceptions import ConflictError
 
     page = await pages_service.get_for_edit(s, user, page_id)
+    if rooms.manager.has_active_room(page_id):
+        raise ConflictError("Page is being edited in a live collaboration session")
     version = await pages_service.get_version(s, user, page_id, version_id)
     page.title = version.title
     page.content_md = version.content_md
     page.updated_by = user.id
+    await pages_repo.delete_collab_state(s, page.id)
     await index_page(s, page, title_changed=True)
     await pages_repo.add_version(s, page, user.id, summary=f"Restored v{version.version}")
     await audit.record(

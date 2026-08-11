@@ -9,7 +9,8 @@ export default function GraphPage() {
   const { workspace } = useWorkspaceCtx();
   const navigate = useNavigate();
   const [showTags, setShowTags] = useState(true);
-  const graphQ = useGraph(workspace.id, showTags);
+  const [nodeLimit, setNodeLimit] = useState(100);
+  const graphQ = useGraph(workspace.id, showTags, nodeLimit);
 
   if (graphQ.isLoading) {
     return (
@@ -39,6 +40,22 @@ export default function GraphPage() {
             className="h-3.5 w-3.5 accent-indigo-600"
           />
           Show tags
+        </label>
+        <label className="flex items-center gap-1.5 text-[13px] text-neutral-700">
+          Node limit
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            step={1}
+            value={nodeLimit}
+            onChange={(event) => {
+              const value = event.currentTarget.valueAsNumber;
+              if (Number.isInteger(value) && value >= 1 && value <= 1000) setNodeLimit(value);
+            }}
+            className="w-20 rounded border border-neutral-200 bg-surface px-2 py-1 text-right text-xs tabular-nums outline-none focus:border-indigo-400"
+            aria-label="Maximum graph nodes"
+          />
         </label>
         <span className="text-xs text-neutral-400">
           {data.nodes.length} nodes · {data.edges.length} edges

@@ -89,6 +89,23 @@ class TestYMarkdown:
     def test_empty(self):
         assert self.roundtrip("") == ""
 
+    def test_table_and_images_roundtrip_without_losing_content(self):
+        md = (
+            "| Name | Value |\n"
+            "| --- | --- |\n"
+            "| image | **kept** |\n\n"
+            "![resolved](/api/v1/files/11111111-1111-1111-1111-111111111111/preview)\n\n"
+            "![[unresolved image.png]]\n"
+        )
+        once = self.roundtrip(md)
+        twice = self.roundtrip(once)
+
+        assert once == twice
+        assert "| Name | Value |" in once
+        assert "| image | **kept** |" in once
+        assert "![resolved](/api/v1/files/11111111-1111-1111-1111-111111111111/preview)" in once
+        assert "![[unresolved image.png]]" in once
+
 
 class TestProtocol:
     def test_varuint(self):

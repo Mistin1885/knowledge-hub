@@ -96,15 +96,15 @@ async def seed(s: AsyncSession) -> dict:
             s, email, name, hasher.hash("demo1234"), is_admin
         )
 
-    if await ws_repo.get_by_slug(s, "engineering"):
-        return {"skipped": "workspace 'engineering' already exists"}
+    if await ws_repo.get_by_slug(s, "demo"):
+        return {"skipped": "workspace 'demo' already exists"}
 
     admin = users["admin@example.com"]
     ws, _ = await ws_service.create(
-        s, admin, "Engineering", "engineering", "工程團隊知識庫", "🛠️"
+        s, admin, "demo", "demo", "工程團隊知識庫", "🛠️"
     )
-    await ws_repo.add_member(s, ws.id, users["alice@example.com"].id, Role.MEMBER)
-    await ws_repo.add_member(s, ws.id, users["bob@example.com"].id, Role.MEMBER)
+    await ws_repo.add_member(s, ws.id, users["alice@example.com"].id, Role.VIEWER)
+    await ws_repo.add_member(s, ws.id, users["bob@example.com"].id, Role.VIEWER)
 
     created = {}
     for title, parent_title, content, tags in PAGES:

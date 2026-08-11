@@ -24,6 +24,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    image: mistin1885/knowledge-hub-app:v1.1.1
     environment:
       KM_DATABASE_URL: postgresql+asyncpg://km:${KM_DB_PASSWORD:?Set KM_DB_PASSWORD in .env}@db:5432/km
       KM_UPLOADS_DIR: /srv/knowledge-hub/data/uploads
@@ -34,6 +35,7 @@ services:
       KM_EMBEDDINGS_MODEL: ${KM_EMBEDDINGS_MODEL:-text-embedding-3-small}
       KM_REGISTRATION_OPEN: ${KM_REGISTRATION_OPEN:-true}
       KM_COOKIE_SECURE: ${KM_COOKIE_SECURE:-false}
+      KM_DEFAULT_READONLY_WORKSPACE_SLUG: ${KM_DEFAULT_READONLY_WORKSPACE_SLUG:-demo}
       KM_MAX_UPLOAD: ${KM_MAX_UPLOAD:-5G}
       KM_MAX_UPLOAD_MB: ${KM_MAX_UPLOAD_MB:-5120}
     volumes:

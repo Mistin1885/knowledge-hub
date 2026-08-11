@@ -96,6 +96,7 @@ claude mcp add knowledge-hub --transport http http://your-host:8080/mcp \
 uv run km --help                    # 全部指令
 uv run km identity create-user ...  # 建帳號（繞過註冊開關）
 uv run km pages export <ws-slug>    # 匯出整個 workspace 為 markdown vault
+uv run km pages import-vault <ws-slug> <vault-path>  # 可重跑的 Obsidian Vault 匯入
 uv run km search reindex <ws-id>    # 重建 chunks + embeddings（換 embedding model 後）
 uv run km collab show-md <page-id>  # 檢視協作 doc 目前的 markdown（除錯）
 ```
