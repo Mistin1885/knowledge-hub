@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Folder, FolderUp, FileUp, Loader2, Plus, Search } from 'lucide-react';
 import type { Workspace } from '../../api/types';
@@ -10,6 +10,21 @@ import PageTree from '../sidebar/PageTree';
 import TagsSection from '../sidebar/TagsSection';
 import { useImportManager } from '../imports/ImportManager';
 
+const SIDEBAR_WIDTH_KEY = 'km:sidebar-width';
+const DEFAULT_SIDEBAR_WIDTH = 256;
+const MIN_SIDEBAR_WIDTH = 220;
+const MAX_SIDEBAR_WIDTH = 640;
+
+function clampSidebarWidth(width: number): number {
+  const viewportMaximum = Math.max(MIN_SIDEBAR_WIDTH, window.innerWidth - 320);
+  return Math.min(Math.max(width, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH, viewportMaximum);
+}
+
+function storedSidebarWidth(): number {
+  const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  return clampSidebarWidth(Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_SIDEBAR_WIDTH);
+}
+
 export default function Sidebar({
   workspace,
   workspaces,
@@ -18,6 +33,9 @@ export default function Sidebar({
   workspaces: Workspace[];
 }) {
   const [query, setQuery] = useState('');
+  const [width, setWidth] = useState(storedSidebarWidth);
+  const [isResizing, setIsResizing] = useState(false);
+  const widthRef = useRef(width);
   const navigate = useNavigate();
   const createPage = useCreatePage(workspace.id);
   const uploadFiles = useUploadFiles(workspace.id);
@@ -28,6 +46,36 @@ export default function Sidebar({
   const dirInputRef = useRef<HTMLInputElement>(null);
   const vaultFileInputRef = useRef<HTMLInputElement>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
+
+  const applyWidth = (nextWidth: number, persist = false) => {
+    const clamped = clampSidebarWidth(nextWidth);
+    widthRef.current = clamped;
+    setWidth(clamped);
+    if (persist) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped));
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onPointerMove = (event: PointerEvent) => applyWidth(event.clientX);
+    const finishResize = () => {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(widthRef.current));
+      setIsResizing(false);
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', finishResize, { once: true });
+
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', finishResize);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [isResizing]);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +96,11 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="flex w-64 flex-none flex-col border-r border-neutral-200 bg-surface">
+    <aside
+      className="relative flex flex-none flex-col border-r border-neutral-200 bg-surface"
+      style={{ width }}
+      data-sidebar-width={width}
+    >
       <div className="border-b border-neutral-200 p-2">
         <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
         <form onSubmit={submitSearch} className="relative mt-2">
@@ -175,6 +227,31 @@ export default function Sidebar({
           e.target.value = '';
         }}
         {...({ webkitdirectory: '' } as Record<string, string>)}
+      />
+      <div
+        role="separator"
+        aria-label="Resize navigation"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_SIDEBAR_WIDTH}
+        aria-valuemax={MAX_SIDEBAR_WIDTH}
+        aria-valuenow={width}
+        tabIndex={0}
+        title="Drag to resize navigation · Double-click to reset"
+        className={`absolute -right-1 top-0 z-20 h-full w-2 cursor-col-resize touch-none transition-colors focus:bg-indigo-400/70 focus:outline-none ${
+          isResizing ? 'bg-indigo-400/70' : 'bg-transparent hover:bg-indigo-300/60'
+        }`}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          setIsResizing(true);
+        }}
+        onDoubleClick={() => applyWidth(DEFAULT_SIDEBAR_WIDTH, true)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const direction = event.key === 'ArrowLeft' ? -1 : 1;
+          applyWidth(width + direction * (event.shiftKey ? 40 : 10), true);
+        }}
       />
     </aside>
   );
