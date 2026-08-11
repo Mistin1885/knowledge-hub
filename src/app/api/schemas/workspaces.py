@@ -64,6 +64,24 @@ class MemberOut(BaseModel):
     role: Role
     permissions: list[Permission]
     joined_at: datetime
+    last_login_at: datetime | None
+
+
+class MemberDirectoryItemOut(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    name: str
+    role: Role | None
+    permissions: list[Permission]
+    joined_at: datetime | None
+    last_login_at: datetime | None
+
+
+class MemberDirectoryPageOut(BaseModel):
+    items: list[MemberDirectoryItemOut]
+    page: int
+    page_size: int
+    total: int
 
 
 class AuditEntryOut(BaseModel):

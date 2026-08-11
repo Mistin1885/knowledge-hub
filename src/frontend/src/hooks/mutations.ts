@@ -169,7 +169,12 @@ export function useAddMember(workspaceId: string) {
   return useMutation({
     mutationFn: ({ email, role }: { email: string; role: Role }) =>
       workspaceApi.addMember(workspaceId, email, role),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['member-directory', workspaceId] }),
+      ]);
+    },
   });
 }
 
@@ -178,7 +183,13 @@ export function useUpdateMember(workspaceId: string) {
   return useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: Role }) =>
       workspaceApi.updateMember(workspaceId, userId, role),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['member-directory', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['workspaces'] }),
+      ]);
+    },
   });
 }
 
@@ -186,7 +197,13 @@ export function useRemoveMember(workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) => workspaceApi.removeMember(workspaceId, userId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['members', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['member-directory', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['workspaces'] }),
+      ]);
+    },
   });
 }
 

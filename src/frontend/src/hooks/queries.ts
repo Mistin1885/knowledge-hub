@@ -140,10 +140,20 @@ export function useShares(pageId: string, enabled: boolean) {
   });
 }
 
-export function useMembers(workspaceId: string) {
+export function useMembers(workspaceId: string, enabled = true) {
   return useQuery({
     queryKey: ['members', workspaceId],
     queryFn: () => workspaceApi.members(workspaceId),
+    enabled,
+  });
+}
+
+export function useMemberDirectory(workspaceId: string, page: number, enabled = true) {
+  return useQuery({
+    queryKey: ['member-directory', workspaceId, page],
+    queryFn: () => workspaceApi.memberDirectory(workspaceId, page),
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 

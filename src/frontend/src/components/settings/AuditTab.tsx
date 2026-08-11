@@ -3,6 +3,15 @@ import { useAudit } from '../../hooks/queries';
 import { formatDateTime } from '../../lib/utils';
 import { Button, EmptyState, ErrorNote, Spinner } from '../ui/primitives';
 
+function describeDetail(detail: Record<string, unknown>): string {
+  return Object.entries(detail)
+    .map(([key, value]) => {
+      const rendered = typeof value === 'string' ? value : JSON.stringify(value);
+      return `${key}: ${rendered}`;
+    })
+    .join(' · ');
+}
+
 export default function AuditTab({ workspace }: { workspace: Workspace }) {
   const auditQ = useAudit(workspace.id);
 
@@ -30,7 +39,7 @@ export default function AuditTab({ workspace }: { workspace: Workspace }) {
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] text-neutral-800">
-                <span className="font-medium">{item.actor.name}</span>
+                <span className="font-medium">{item.actor?.name ?? 'System'}</span>
                 {item.target_title ? (
                   <>
                     {' → '}
@@ -39,7 +48,11 @@ export default function AuditTab({ workspace }: { workspace: Workspace }) {
                 ) : null}
                 <span className="ml-1 text-xs text-neutral-400">({item.target_type})</span>
               </p>
-              {item.detail && <p className="mt-0.5 text-xs text-neutral-500">{item.detail}</p>}
+              {item.detail && (
+                <p className="mt-0.5 break-words text-xs text-neutral-500">
+                  {describeDetail(item.detail)}
+                </p>
+              )}
             </div>
             <span className="flex-none text-[11px] text-neutral-400">
               {formatDateTime(item.created_at)}

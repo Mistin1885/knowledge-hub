@@ -8,6 +8,7 @@ import type {
   CreatedApiToken,
   GraphData,
   Member,
+  MemberDirectoryPage,
   MentionItem,
   Page,
   PageDetail,
@@ -72,6 +73,10 @@ export const workspaceApi = {
     http.patch<Workspace>(`/workspaces/${id}`, data),
   remove: (id: string) => http.delete(`/workspaces/${id}`),
   members: (id: string) => http.get<Member[]>(`/workspaces/${id}/members`),
+  memberDirectory: (id: string, page: number) =>
+    http.get<MemberDirectoryPage>(
+      `/workspaces/${id}/member-directory?page=${encodeURIComponent(page)}&page_size=20`,
+    ),
   addMember: (id: string, email: string, role: Role) =>
     http.post<Member>(`/workspaces/${id}/members`, { email, role }),
   updateMember: (id: string, userId: string, role: Role) =>

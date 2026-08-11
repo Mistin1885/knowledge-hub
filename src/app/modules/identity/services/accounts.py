@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from pwdlib import PasswordHash
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +34,7 @@ async def login(
     if user is None or not _hasher.verify(password, user.password_hash):
         raise UnauthenticatedError("Invalid email or password")
     raw = new_token()
+    user.last_login_at = datetime.now(UTC)
     await repo.create_session(
         s,
         user_id=user.id,

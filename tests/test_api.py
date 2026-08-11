@@ -171,6 +171,146 @@ async def test_comments_mentions_audit(client, alice):
     assert (await client.get(f"/api/v1/workspaces/{wid}/audit")).status_code == 403
 
 
+async def test_audit_supports_system_actor_and_structured_detail(client, alice):
+    from uuid import UUID
+
+    from app.infra.db.engine import session_factory
+    from app.infra.db.models import AuditLog
+
+    ws = await make_workspace(client)
+    async with session_factory() as session:
+        session.add(
+            AuditLog(
+                workspace_id=UUID(ws["id"]),
+                actor_id=None,
+                action="system.repair",
+                target_type="workspace",
+                target_id=UUID(ws["id"]),
+                target_title=ws["name"],
+                detail={"fields": ["role", "joined_at"], "count": 2},
+            )
+        )
+        await session.commit()
+
+    response = await client.get(f"/api/v1/workspaces/{ws['id']}/audit")
+    assert response.status_code == 200
+    entry = next(item for item in response.json()["items"] if item["action"] == "system.repair")
+    assert entry["actor"] is None
+    assert entry["detail"] == {"fields": ["role", "joined_at"], "count": 2}
+
+
+async def test_member_directory_paginates_all_users_and_persists_last_login(client, alice):
+    from datetime import UTC, datetime
+
+    from app.infra.db.engine import session_factory
+    from app.infra.db.models import User
+
+    ws = await make_workspace(client)
+    wid = ws["id"]
+
+    await register_and_login(client, "directory-user@test.com", "Directory User")
+    await client.post("/api/v1/auth/logout")
+    await client.post(
+        "/api/v1/auth/login", json={"email": "alice@test.com", "password": "password123"}
+    )
+
+    async with session_factory() as session:
+        session.add_all(
+            [
+                User(
+                    email=f"user-{index:02d}@test.com",
+                    name=f"User {index:02d}",
+                    password_hash="not-used-in-this-test",
+                    is_admin=False,
+                    last_login_at=datetime(2026, 1, index + 1, tzinfo=UTC),
+                )
+                for index in range(20)
+            ]
+        )
+        await session.commit()
+
+    first = (
+        await client.get(
+            f"/api/v1/workspaces/{wid}/member-directory", params={"page": 1, "page_size": 20}
+        )
+    ).json()
+    second = (
+        await client.get(
+            f"/api/v1/workspaces/{wid}/member-directory", params={"page": 2, "page_size": 20}
+        )
+    ).json()
+    assert first["total"] == 22
+    assert first["page"] == 1 and first["page_size"] == 20 and len(first["items"]) == 20
+    assert len(second["items"]) == 2
+    assert first["items"][0]["role"] == "owner"
+
+    directory_user = next(
+        item
+        for item in [*first["items"], *second["items"]]
+        if item["email"] == "directory-user@test.com"
+    )
+    assert directory_user["role"] is None and directory_user["joined_at"] is None
+    assert directory_user["last_login_at"] is not None
+
+    added = await client.post(
+        f"/api/v1/workspaces/{wid}/members",
+        json={"email": directory_user["email"], "role": "viewer"},
+    )
+    assert added.status_code == 201
+    directory_user = next(
+        item
+        for item in (
+            await client.get(f"/api/v1/workspaces/{wid}/member-directory")
+        ).json()["items"]
+        if item["email"] == "directory-user@test.com"
+    )
+    assert directory_user["role"] == "viewer" and directory_user["joined_at"] is not None
+
+    await client.post(
+        "/api/v1/auth/login",
+        json={"email": "directory-user@test.com", "password": "password123"},
+    )
+    assert (
+        await client.get(f"/api/v1/workspaces/{wid}/member-directory")
+    ).status_code == 403
+
+    await client.post(
+        "/api/v1/auth/login", json={"email": "alice@test.com", "password": "password123"}
+    )
+    changed = await client.patch(
+        f"/api/v1/workspaces/{wid}/members/{directory_user['user_id']}",
+        json={"role": "admin"},
+    )
+    assert changed.status_code == 200
+    directory_user = next(
+        item
+        for item in (
+            await client.get(f"/api/v1/workspaces/{wid}/member-directory")
+        ).json()["items"]
+        if item["email"] == "directory-user@test.com"
+    )
+    assert directory_user["role"] == "admin"
+
+    removed = await client.delete(
+        f"/api/v1/workspaces/{wid}/members/{directory_user['user_id']}"
+    )
+    assert removed.status_code == 204
+    all_entries = []
+    for page in (1, 2):
+        all_entries.extend(
+            (
+                await client.get(
+                    f"/api/v1/workspaces/{wid}/member-directory", params={"page": page}
+                )
+            ).json()["items"]
+        )
+    directory_user = next(
+        item for item in all_entries if item["email"] == "directory-user@test.com"
+    )
+    assert directory_user["role"] is None and directory_user["joined_at"] is None
+    assert directory_user["last_login_at"] is not None
+
+
 async def test_graph_related_orphans(client, alice):
     ws = await make_workspace(client)
     wid = ws["id"]

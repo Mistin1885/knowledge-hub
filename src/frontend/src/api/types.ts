@@ -30,16 +30,34 @@ export interface Member {
   role: Role;
   permissions: ('read' | 'write' | 'manage' | 'own')[];
   joined_at: string;
+  last_login_at: string | null;
+}
+
+export interface MemberDirectoryEntry {
+  user_id: string;
+  email: string;
+  name: string;
+  role: Role | null;
+  permissions: ('read' | 'write' | 'manage' | 'own')[];
+  joined_at: string | null;
+  last_login_at: string | null;
+}
+
+export interface MemberDirectoryPage {
+  items: MemberDirectoryEntry[];
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export interface AuditItem {
   id: string;
-  actor: UserRef;
+  actor: UserRef | null;
   action: string;
   target_type: string;
-  target_id: string;
+  target_id: string | null;
   target_title: string | null;
-  detail: string | null;
+  detail: Record<string, unknown> | null;
   created_at: string;
 }
 
