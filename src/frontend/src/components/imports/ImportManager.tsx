@@ -74,6 +74,7 @@ export function ImportManagerProvider({ children }: { children: React.ReactNode 
           qc.invalidateQueries({ queryKey: ['tags', workspaceId] }),
           qc.invalidateQueries({ queryKey: ['children'] }),
           qc.invalidateQueries({ queryKey: ['graph', workspaceId] }),
+          qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] }),
         ]);
       }
     },

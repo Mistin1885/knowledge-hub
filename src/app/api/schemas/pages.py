@@ -72,6 +72,24 @@ class PageOut(BaseModel):
     file_count: int | None = None
 
 
+class VaultTreeNodeOut(BaseModel):
+    """Small, lazy-loaded representation used only by the Vault sidebar."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    parent_id: uuid.UUID | None
+    title: str
+    icon: str | None
+    status: str
+    visibility: str
+    position: float
+    is_folder: bool
+    node_type: str
+    preview_kind: str | None = None
+    file_count: int | None = None
+    has_children: bool = False
+
+
 class PageDetailOut(PageOut):
     content_md: str
     backlink_count: int

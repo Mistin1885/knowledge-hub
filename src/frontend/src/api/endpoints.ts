@@ -24,6 +24,7 @@ import type {
   TagInfo,
   UnlinkedMention,
   User,
+  VaultTreeNode,
   Workspace,
 } from './types';
 
@@ -81,6 +82,10 @@ export const workspaceApi = {
       `/workspaces/${id}/audit?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
     ),
   pages: (id: string) => http.get<Page[]>(`/workspaces/${id}/pages`),
+  tree: (id: string, parentId: string | null = null) => {
+    const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : '';
+    return http.get<VaultTreeNode[]>(`/workspaces/${id}/tree${query}`);
+  },
   tags: (id: string) => http.get<TagInfo[]>(`/workspaces/${id}/tags`),
   graph: (id: string, withTags: boolean, limit = 100) =>
     http.get<GraphData>(
@@ -132,6 +137,7 @@ export interface ImportItemResult {
 }
 
 export const pageApi = {
+  ancestors: (id: string) => http.get<VaultTreeNode[]>(`/pages/${id}/ancestors`),
   children: (id: string) => http.get<ChildPage[]>(`/pages/${id}/children`),
   create: (workspaceId: string, data: CreatePageInput) =>
     http.post<PageDetail>(`/workspaces/${workspaceId}/pages`, data),

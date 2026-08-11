@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
-import type { Page, Workspace } from '../../api/types';
-import { usePages } from '../../hooks/queries';
+import type { VaultTreeNode, Workspace } from '../../api/types';
+import { usePageAncestors, useVaultTree } from '../../hooks/queries';
 import { useCreatePage, useDeletePage, useUpdatePage, useUploadFiles } from '../../hooks/mutations';
 import { pageApi } from '../../api/endpoints';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import { ancestorIds, buildPageTree } from '../../lib/tree';
 import { ConfirmDialog, PromptDialog } from '../ui/Modal';
 import { EmptyState, Spinner } from '../ui/primitives';
 import PageTreeNode, { PAGE_DND_TYPE, type TreeActions } from './PageTreeNode';
@@ -19,9 +18,10 @@ function cnRootDrop(active: boolean): string {
 }
 
 export default function PageTree({ workspace }: { workspace: Workspace }) {
-  const pagesQ = usePages(workspace.id);
   const match = useMatch('/w/:slug/p/:pageId');
   const currentPageId = match?.params.pageId ?? null;
+  const rootsQ = useVaultTree(workspace.id, null);
+  const ancestorsQ = usePageAncestors(currentPageId);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -34,26 +34,22 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
   const importDirInputRef = useRef<HTMLInputElement>(null);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [renaming, setRenaming] = useState<Page | null>(null);
-  const [deleting, setDeleting] = useState<Page | null>(null);
+  const [renaming, setRenaming] = useState<VaultTreeNode | null>(null);
+  const [deleting, setDeleting] = useState<VaultTreeNode | null>(null);
   const [rootDragOver, setRootDragOver] = useState(false);
-  const [uploadTarget, setUploadTarget] = useState<Page | null>(null);
-  const [importTarget, setImportTarget] = useState<Page | null>(null);
-
-  const pages = useMemo(() => pagesQ.data ?? [], [pagesQ.data]);
-  const tree = useMemo(() => buildPageTree(pages), [pages]);
+  const [uploadTarget, setUploadTarget] = useState<VaultTreeNode | null>(null);
+  const [importTarget, setImportTarget] = useState<VaultTreeNode | null>(null);
 
   // Auto-expand ancestors of the current page.
   useEffect(() => {
-    if (!currentPageId || pages.length === 0) return;
-    const ancestors = ancestorIds(pages, currentPageId);
+    const ancestors = ancestorsQ.data?.map((page) => page.id) ?? [];
     if (ancestors.length === 0) return;
     setExpanded((prev) => {
       const next = new Set(prev);
       ancestors.forEach((id) => next.add(id));
       return next.size === prev.size ? prev : next;
     });
-  }, [currentPageId, pages]);
+  }, [ancestorsQ.data]);
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
@@ -64,7 +60,7 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
     });
   };
 
-  const runImport = async (files: File[], parent: Page | null) => {
+  const runImport = async (files: File[], parent: VaultTreeNode | null) => {
     if (files.length === 0) return;
     if (parent) setExpanded((prev) => new Set(prev).add(parent.id));
     try {
@@ -92,19 +88,21 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
       // is_folder is not in the documented PATCH contract; see endpoints.ts note.
       void pageApi
         .update(page.id, { is_folder: !page.is_folder })
-        .then(() => qc.invalidateQueries({ queryKey: ['pages', workspace.id] }))
-        .catch(() => qc.invalidateQueries({ queryKey: ['pages', workspace.id] }));
+        .then(() => qc.invalidateQueries({ queryKey: ['vault-tree', workspace.id] }))
+        .catch(() => qc.invalidateQueries({ queryKey: ['vault-tree', workspace.id] }));
     },
     onMovePage: (pageId, target, placement) => {
-      const dragged = pages.find((p) => p.id === pageId);
-      if (!dragged) return;
       if (target?.id === pageId) return;
       const parentId = target && placement === 'inside' ? target.id : (target?.parent_id ?? null);
-      if (parentId === pageId || (parentId && [parentId, ...ancestorIds(pages, parentId)].includes(pageId))) {
-        return;
-      }
-      const siblings = pages
-        .filter((page) => page.parent_id === parentId && page.id !== pageId)
+      if (parentId === pageId) return;
+      const siblings = (
+        qc.getQueryData<VaultTreeNode[]>([
+          'vault-tree',
+          workspace.id,
+          parentId ?? 'root',
+        ]) ?? []
+      )
+        .filter((page) => page.id !== pageId)
         .sort((a, b) => a.position - b.position || a.title.localeCompare(b.title));
       let beforeId: string | null = null;
       if (target && placement === 'before') {
@@ -114,8 +112,10 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
         beforeId = targetIndex >= 0 ? (siblings[targetIndex + 1]?.id ?? null) : null;
       }
       const refresh = () => {
+        qc.invalidateQueries({ queryKey: ['vault-tree', workspace.id] });
         qc.invalidateQueries({ queryKey: ['pages', workspace.id] });
         qc.invalidateQueries({ queryKey: ['children'] });
+        qc.invalidateQueries({ queryKey: ['page-ancestors'] });
       };
       void pageApi
         .move(pageId, parentId, beforeId)
@@ -152,17 +152,17 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
 
   const canEdit = workspace.my_role !== 'viewer';
 
-  if (pagesQ.isLoading) {
+  if (rootsQ.isLoading) {
     return (
       <div className="flex justify-center py-4">
         <Spinner />
       </div>
     );
   }
-  if (pagesQ.isError) {
+  if (rootsQ.isError) {
     return <EmptyState message="Could not load pages." />;
   }
-  if (tree.length === 0) {
+  if ((rootsQ.data ?? []).length === 0) {
     return <EmptyState message="No pages yet — create your first one." />;
   }
 
@@ -201,10 +201,11 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
       {uploadFiles.isError && (
         <p className="mb-1 px-2 py-1 text-[11px] text-red-600">File upload failed.</p>
       )}
-      {tree.map((node) => (
+      {(rootsQ.data ?? []).map((node) => (
         <PageTreeNode
-          key={node.page.id}
+          key={node.id}
           node={node}
+          workspaceId={workspace.id}
           depth={0}
           slug={workspace.slug}
           currentPageId={currentPageId}
@@ -288,7 +289,7 @@ function RenameDialog({
   workspaceId,
   onClose,
 }: {
-  page: Page;
+  page: VaultTreeNode;
   workspaceId: string;
   onClose: () => void;
 }) {

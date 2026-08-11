@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -14,6 +14,7 @@ from app.infra.db.models import (
     PageShare,
     PageTag,
     PageVersion,
+    PageYDoc,
     Tag,
 )
 
@@ -72,6 +73,38 @@ async def find_sibling(
     return await s.scalar(q)
 
 
+async def list_tree_level(
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    parent_id: uuid.UUID | None,
+    visibility_filter,
+) -> list[Page]:
+    """Return one visible tree level without loading descendants.
+
+    A visible child of a hidden/private parent is promoted to the root, which
+    matches the legacy flat-tree behavior without leaking the hidden parent.
+    """
+    visible_ids = select(Page.id).where(Page.workspace_id == workspace_id, visibility_filter)
+    query = select(Page).where(Page.workspace_id == workspace_id, visibility_filter)
+    if parent_id is None:
+        query = query.where(
+            or_(Page.parent_id.is_(None), Page.parent_id.not_in(visible_ids))
+        )
+    else:
+        query = query.where(Page.parent_id == parent_id)
+    return list(await s.scalars(query.order_by(Page.position, Page.created_at, Page.id)))
+
+
+async def tree_structure(s: AsyncSession, workspace_id: uuid.UUID, visibility_filter) -> list[tuple]:
+    """Only the columns needed for recursive counts and has-children flags."""
+    rows = await s.execute(
+        select(Page.id, Page.parent_id, Page.node_type, Page.is_folder).where(
+            Page.workspace_id == workspace_id, visibility_filter
+        )
+    )
+    return list(rows.tuples())
+
+
 async def lock_workspace_tree(s: AsyncSession, workspace_id: uuid.UUID) -> None:
     """Serialize tree moves in a workspace and use a stable lock order.
 
@@ -123,6 +156,37 @@ def folder_file_counts(nodes: list[Page]) -> dict[uuid.UUID, int]:
         if node.node_type == "folder" or node.is_folder:
             count(node.id, set())
     return memo
+
+
+def folder_file_counts_from_rows(rows: list[tuple]) -> tuple[dict[uuid.UUID, int], set[uuid.UUID]]:
+    """Recursive non-folder counts and parents that have visible children."""
+    by_parent: dict[uuid.UUID | None, list[tuple]] = {}
+    folders: set[uuid.UUID] = set()
+    for node_id, parent_id, node_type, is_folder in rows:
+        by_parent.setdefault(parent_id, []).append((node_id, node_type, is_folder))
+        if node_type == "folder" or is_folder:
+            folders.add(node_id)
+
+    memo: dict[uuid.UUID, int] = {}
+
+    def count(node_id: uuid.UUID, visiting: set[uuid.UUID]) -> int:
+        if node_id in memo:
+            return memo[node_id]
+        if node_id in visiting:
+            return 0
+        total = 0
+        for child_id, node_type, is_folder in by_parent.get(node_id, []):
+            if node_type == "folder" or is_folder:
+                total += count(child_id, visiting | {node_id})
+            else:
+                total += 1
+                total += count(child_id, visiting | {node_id})
+        memo[node_id] = total
+        return total
+
+    for folder_id in folders:
+        count(folder_id, set())
+    return memo, {parent_id for parent_id, children in by_parent.items() if parent_id and children}
 
 
 async def is_descendant(s: AsyncSession, ancestor_id: uuid.UUID, maybe_descendant_id: uuid.UUID) -> bool:
@@ -200,6 +264,28 @@ async def get_page_tags(s: AsyncSession, page_id: uuid.UUID) -> list[str]:
     )
 
 
+async def delete_collab_state(s: AsyncSession, page_id: uuid.UUID) -> None:
+    """Force the next collaboration room to rebuild from authoritative Markdown."""
+    await s.execute(delete(PageYDoc).where(PageYDoc.page_id == page_id))
+
+
+async def page_tags_for_nodes(
+    s: AsyncSession, node_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[str]]:
+    if not node_ids:
+        return {}
+    rows = await s.execute(
+        select(PageTag.page_id, Tag.name)
+        .join(Tag, PageTag.tag_id == Tag.id)
+        .where(PageTag.page_id.in_(node_ids))
+        .order_by(PageTag.page_id, Tag.name)
+    )
+    result: dict[uuid.UUID, list[str]] = {}
+    for page_id, name in rows:
+        result.setdefault(page_id, []).append(name)
+    return result
+
+
 async def set_page_tags(s: AsyncSession, page: Page, names: list[str]) -> None:
     wanted = {n.strip() for n in names if n.strip()}
     await s.execute(delete(PageTag).where(PageTag.page_id == page.id))
@@ -244,6 +330,22 @@ async def get_page_metadata(s: AsyncSession, page_id: uuid.UUID) -> dict[str, st
         select(PageMetadata.key, PageMetadata.value).where(PageMetadata.page_id == page_id)
     )
     return dict(rows.all())
+
+
+async def page_metadata_for_nodes(
+    s: AsyncSession, node_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, dict[str, str]]:
+    if not node_ids:
+        return {}
+    rows = await s.execute(
+        select(PageMetadata.page_id, PageMetadata.key, PageMetadata.value).where(
+            PageMetadata.page_id.in_(node_ids)
+        )
+    )
+    result: dict[uuid.UUID, dict[str, str]] = {}
+    for page_id, key, value in rows:
+        result.setdefault(page_id, {})[key] = value
+    return result
 
 
 async def set_page_metadata(s: AsyncSession, page_id: uuid.UUID, meta: dict[str, str]) -> None:

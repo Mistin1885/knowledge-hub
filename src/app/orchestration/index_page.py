@@ -93,6 +93,8 @@ async def update_page(s: AsyncSession, user: User, page_id: uuid.UUID, fields: d
     )
     content_changed, title_changed = await pages_service.apply_update(s, user, page, fields)
     if content_changed or title_changed:
+        if content_changed:
+            await pages_repo.delete_collab_state(s, page.id)
         await index_page(s, page, title_changed=title_changed)
         if page.node_type != NodeType.FILE:
             await pages_repo.add_version(s, page, user.id)
@@ -168,12 +170,17 @@ async def restore_version(
     s: AsyncSession, user: User, page_id: uuid.UUID, version_id: uuid.UUID
 ) -> Page:
     from app.modules.audit.services import audit
+    from app.modules.collab.services import rooms
+    from app.shared.exceptions import ConflictError
 
     page = await pages_service.get_for_edit(s, user, page_id)
+    if rooms.manager.has_active_room(page_id):
+        raise ConflictError("Page is being edited in a live collaboration session")
     version = await pages_service.get_version(s, user, page_id, version_id)
     page.title = version.title
     page.content_md = version.content_md
     page.updated_by = user.id
+    await pages_repo.delete_collab_state(s, page.id)
     await index_page(s, page, title_changed=True)
     await pages_repo.add_version(s, page, user.id, summary=f"Restored v{version.version}")
     await audit.record(

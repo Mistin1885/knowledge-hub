@@ -78,6 +78,22 @@ export interface Page {
   file_count: number | null;
 }
 
+export interface VaultTreeNode {
+  id: string;
+  workspace_id: string;
+  parent_id: string | null;
+  title: string;
+  icon: string | null;
+  status: PageStatus;
+  visibility: PageVisibility;
+  position: number;
+  is_folder: boolean;
+  node_type: NodeType;
+  preview_kind: 'image' | 'pdf' | null;
+  file_count: number | null;
+  has_children: boolean;
+}
+
 export interface PageDetail extends Page {
   content_md: string;
   backlink_count: number;

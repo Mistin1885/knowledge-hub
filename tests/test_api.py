@@ -509,22 +509,108 @@ async def test_idempotent_obsidian_import_counts_images_and_persisted_order(clie
     assert updated.json()["page"]["id"] == file_id
     assert (await client.get(f"/api/v1/files/{file_id}/preview")).content == png_v2
 
+    note_content = (
+        b"# Guide\n\n"
+        b"| Name | Value |\n"
+        b"| --- | --- |\n"
+        b"| first | second |\n\n"
+        b"![[pic.png]]\n\n"
+        b"![[missing-image.png]]\n\n"
+        b'![legacy](../missing/legacy.png "caption")\n'
+        b"![orphan](/api/v1/files/22222222-2222-2222-2222-222222222222/preview)\n"
+    )
     note = await client.post(
         f"/api/v1/workspaces/{wid}/import",
         params={"relative_path": "Team Vault/notes/Guide.md"},
-        files={"file": ("Guide.md", b"# Guide\n\n![[pic.png]]", "text/markdown")},
+        files={"file": ("Guide.md", note_content, "text/markdown")},
     )
     assert note.status_code == 200, note.text
     assert note.json()["action"] == "created"
     detail = (await client.get(f"/api/v1/pages/{note.json()['page']['id']}")).json()
     assert f"![pic](/api/v1/files/{file_id}/preview)" in detail["content_md"]
+    assert "![[missing-image.png]]" in detail["content_md"]
+    assert '![legacy](../missing/legacy.png "caption")' in detail["content_md"]
+    assert "Image not found: missing-image.png" in note.json()["warnings"]
+    assert "Image not found: ../missing/legacy.png" in note.json()["warnings"]
 
     repeated_note = await client.post(
         f"/api/v1/workspaces/{wid}/import",
         params={"relative_path": "Team Vault/notes/Guide.md"},
-        files={"file": ("Guide.md", b"# Guide\n\n![[pic.png]]", "text/markdown")},
+        files={"file": ("Guide.md", note_content, "text/markdown")},
     )
     assert repeated_note.json()["action"] == "skipped"
+
+    # The sidebar endpoint returns only one lightweight level at a time.
+    root_tree = (await client.get(f"/api/v1/workspaces/{wid}/tree")).json()
+    root_titles = {node["title"] for node in root_tree}
+    assert {"Team Vault", "Long names", "Other Vault"} <= root_titles
+    assert "assets" not in root_titles and "Guide" not in root_titles
+    tree_vault = next(node for node in root_tree if node["title"] == "Team Vault")
+    assert tree_vault["file_count"] == 2 and tree_vault["has_children"] is True
+    assert "tags" not in tree_vault and "metadata" not in tree_vault and "owner" not in tree_vault
+
+    vault_children = (
+        await client.get(
+            f"/api/v1/workspaces/{wid}/tree", params={"parent_id": tree_vault["id"]}
+        )
+    ).json()
+    assert {node["title"] for node in vault_children} == {"assets", "notes"}
+    assert {node["title"]: node["file_count"] for node in vault_children} == {
+        "assets": 1,
+        "notes": 1,
+    }
+
+    isolated = await make_workspace(client, "Isolated")
+    await client.post(
+        f"/api/v1/workspaces/{isolated['id']}/pages", json={"title": "Only elsewhere"}
+    )
+    assert "Only elsewhere" not in {
+        node["title"] for node in (await client.get(f"/api/v1/workspaces/{wid}/tree")).json()
+    }
+
+    # ZIP exports carry binaries and portable relative paths. Unresolved links
+    # remain exactly as the user wrote them instead of disappearing.
+    import io
+    import zipfile
+
+    exported = await client.get(f"/api/v1/workspaces/{wid}/export")
+    assert exported.status_code == 200
+    zf = zipfile.ZipFile(io.BytesIO(exported.content))
+    exported_note = zf.read("Team Vault/notes/Guide.md").decode()
+    assert "![pic](<../assets/pic.png>)" in exported_note
+    assert "![[missing-image.png]]" in exported_note
+    assert '![legacy](../missing/legacy.png "caption")' in exported_note
+    assert (
+        "![orphan](/api/v1/files/22222222-2222-2222-2222-222222222222/preview)"
+        in exported_note
+    )
+    assert "| Name | Value |\n| --- | --- |\n| first | second |" in exported_note
+    assert zf.read("Team Vault/assets/pic.png") == png_v2
+
+    single_export = await client.get(f"/api/v1/pages/{note.json()['page']['id']}/export")
+    assert "![[pic.png]]" in single_export.text
+    assert "![[missing-image.png]]" in single_export.text
+
+    # An external re-import must invalidate stale Yjs state; otherwise opening
+    # the editor can overwrite the corrected Markdown with an older snapshot.
+    from uuid import UUID
+
+    from app.infra.db.engine import session_factory
+    from app.infra.db.models import PageYDoc
+
+    note_id = UUID(note.json()["page"]["id"])
+    async with session_factory() as session:
+        session.add(PageYDoc(page_id=note_id, state=b"stale"))
+        await session.commit()
+    changed_content = note_content + b"\nUpdated externally.\n"
+    changed_note = await client.post(
+        f"/api/v1/workspaces/{wid}/import",
+        params={"relative_path": "Team Vault/notes/Guide.md"},
+        files={"file": ("Guide.md", changed_content, "text/markdown")},
+    )
+    assert changed_note.json()["action"] == "updated"
+    async with session_factory() as session:
+        assert await session.get(PageYDoc, note_id) is None
 
     pages = (await client.get(f"/api/v1/workspaces/{wid}/pages")).json()
     vault_folder = next(page for page in pages if page["title"] == "Team Vault")

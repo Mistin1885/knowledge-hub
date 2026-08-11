@@ -1,7 +1,7 @@
 """Bidirectional markdown <-> Yjs XmlFragment (ProseMirror/TipTap schema).
 
 The fragment mirrors what y-prosemirror produces for TipTap StarterKit +
-Link/Image/TaskList: block elements are XmlElements tagged with the node name,
+Link/Image/TaskList/Table: block elements are XmlElements tagged with the node name,
 inline content is XmlText with mark-name formatting attributes, and inline
 atoms (hardBreak) are XmlElements between text runs.
 
@@ -14,7 +14,7 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 from pycrdt import XmlElement, XmlFragment, XmlText
 
-_md = MarkdownIt("commonmark").enable(["strikethrough"])
+_md = MarkdownIt("commonmark").enable(["strikethrough", "table"])
 
 TASK_PREFIXES = {"[ ] ": False, "[x] ": True, "[X] ": True}
 
@@ -49,6 +49,8 @@ def _render_blocks(tokens: list[Token], start: int, end: int, parent) -> None:
             i = close + 1
         elif tok.type in ("bullet_list_open", "ordered_list_open"):
             i = _render_list(tokens, i, parent)
+        elif tok.type == "table_open":
+            i = _render_table(tokens, i, parent)
         elif tok.type == "blockquote_open":
             close = _find_close(tokens, i, "blockquote_close")
             el = parent.children.append(XmlElement("blockquote"))
@@ -70,6 +72,32 @@ def _render_blocks(tokens: list[Token], start: int, end: int, parent) -> None:
             i += 1
         else:
             i += 1
+
+
+def _render_table(tokens: list[Token], i: int, parent) -> int:
+    close = _find_close(tokens, i, "table_close")
+    table = parent.children.append(XmlElement("table"))
+    row = None
+    j = i + 1
+    while j < close:
+        token = tokens[j]
+        if token.type == "tr_open":
+            row = table.children.append(XmlElement("tableRow"))
+        elif token.type in ("th_open", "td_open") and row is not None:
+            close_type = "th_close" if token.type == "th_open" else "td_close"
+            cell_close = _find_close(tokens, j, close_type)
+            cell_tag = "tableHeader" if token.type == "th_open" else "tableCell"
+            cell = row.children.append(XmlElement(cell_tag))
+            paragraph = cell.children.append(XmlElement("paragraph"))
+            inline = next(
+                (candidate for candidate in tokens[j + 1 : cell_close] if candidate.type == "inline"),
+                None,
+            )
+            if inline is not None:
+                _render_inline(inline, paragraph)
+            j = cell_close
+        j += 1
+    return close + 1
 
 
 def _render_list(tokens: list[Token], i: int, parent) -> int:
@@ -241,6 +269,8 @@ def _block_to_md(node, indent: str) -> str | None:
         return f"{indent}![{attrs.get('alt', '')}]({attrs.get('src', '')})"
     if tag in ("bulletList", "orderedList", "taskList"):
         return _list_to_md(node, indent)
+    if tag == "table":
+        return _table_to_md(node, indent)
     # unknown node: render children as blocks
     inner = [_block_to_md(c, indent) for c in node.children]
     return "\n\n".join(b for b in inner if b is not None) or None
@@ -270,6 +300,32 @@ def _list_to_md(node, indent: str) -> str:
                 parts.append(rendered)
         lines.append("\n".join(parts) if parts else indent + bullet.rstrip())
     return "\n".join(lines)
+
+
+def _table_to_md(node, indent: str) -> str:
+    rows: list[list[str]] = []
+    for row in node.children:
+        cells: list[str] = []
+        for cell in row.children:
+            blocks = [
+                rendered
+                for rendered in (_block_to_md(child, "") for child in cell.children)
+                if rendered is not None
+            ]
+            value = "<br>".join(blocks).replace("\n", "<br>").replace("|", r"\|")
+            cells.append(value)
+        rows.append(cells)
+    if not rows:
+        return ""
+    width = max(len(row) for row in rows)
+    normalized = [row + [""] * (width - len(row)) for row in rows]
+
+    def line(cells: list[str]) -> str:
+        return indent + "| " + " | ".join(cells) + " |"
+
+    return "\n".join(
+        [line(normalized[0]), line(["---"] * width), *(line(row) for row in normalized[1:])]
+    )
 
 
 def node_children(node):

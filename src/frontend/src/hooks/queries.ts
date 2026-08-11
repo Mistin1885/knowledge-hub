@@ -23,6 +23,26 @@ export function usePages(workspaceId: string | undefined) {
   });
 }
 
+export function useVaultTree(
+  workspaceId: string,
+  parentId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['vault-tree', workspaceId, parentId ?? 'root'],
+    queryFn: () => workspaceApi.tree(workspaceId, parentId),
+    enabled,
+  });
+}
+
+export function usePageAncestors(pageId: string | null) {
+  return useQuery({
+    queryKey: ['page-ancestors', pageId],
+    queryFn: () => pageApi.ancestors(pageId!),
+    enabled: !!pageId,
+  });
+}
+
 export function usePage(pageId: string | undefined) {
   return useQuery({
     queryKey: ['page', pageId],

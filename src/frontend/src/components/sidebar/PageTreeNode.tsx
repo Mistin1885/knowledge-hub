@@ -17,27 +17,28 @@ import {
   Trash2,
   FolderPlus,
   FolderUp,
+  Loader2,
 } from 'lucide-react';
-import type { Page } from '../../api/types';
+import type { VaultTreeNode } from '../../api/types';
 import { pageApi } from '../../api/endpoints';
-import type { PageTreeNode as TreeNode } from '../../lib/tree';
+import { useVaultTree } from '../../hooks/queries';
 import { cn, downloadFile } from '../../lib/utils';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 
 export interface TreeActions {
-  onNewSubpage: (page: Page, isFolder: boolean) => void;
-  onRename: (page: Page) => void;
-  onDelete: (page: Page) => void;
-  onToggleFolder: (page: Page) => void;
+  onNewSubpage: (page: VaultTreeNode, isFolder: boolean) => void;
+  onRename: (page: VaultTreeNode) => void;
+  onDelete: (page: VaultTreeNode) => void;
+  onToggleFolder: (page: VaultTreeNode) => void;
   onMovePage: (
     pageId: string,
-    target: Page | null,
+    target: VaultTreeNode | null,
     placement: 'before' | 'inside' | 'after',
   ) => void;
-  onChooseFiles: (parent: Page | null) => void;
-  onChooseImportFile: (parent: Page) => void;
-  onChooseImportFolder: (parent: Page) => void;
-  onFilesDropped: (parent: Page | null, files: File[]) => void;
+  onChooseFiles: (parent: VaultTreeNode | null) => void;
+  onChooseImportFile: (parent: VaultTreeNode) => void;
+  onChooseImportFolder: (parent: VaultTreeNode) => void;
+  onFilesDropped: (parent: VaultTreeNode | null, files: File[]) => void;
 }
 
 /** dataTransfer type for dragging a page row between tree levels. */
@@ -45,6 +46,7 @@ export const PAGE_DND_TYPE = 'application/x-km-page';
 
 export default function PageTreeNode({
   node,
+  workspaceId,
   depth,
   slug,
   currentPageId,
@@ -53,7 +55,8 @@ export default function PageTreeNode({
   actions,
   canEdit,
 }: {
-  node: TreeNode;
+  node: VaultTreeNode;
+  workspaceId: string;
   depth: number;
   slug: string;
   currentPageId: string | null;
@@ -62,9 +65,10 @@ export default function PageTreeNode({
   actions: TreeActions;
   canEdit: boolean;
 }) {
-  const { page, children } = node;
+  const page = node;
   const isExpanded = expanded.has(page.id);
-  const hasChildren = children.length > 0;
+  const hasChildren = page.has_children;
+  const childrenQ = useVaultTree(workspaceId, page.id, isExpanded && hasChildren);
   const isCurrent = page.id === currentPageId;
   const canContain = page.node_type !== 'file';
   const [dragOver, setDragOver] = useState<'before' | 'inside' | 'after' | null>(null);
@@ -263,7 +267,7 @@ export default function PageTreeNode({
                     }
                     onClick={() => {
                       close();
-                      downloadFile(page.download_url ?? pageApi.exportUrl(page.id));
+                      downloadFile(pageApi.exportUrl(page.id));
                     }}
                   />
                   <MenuItem
@@ -281,11 +285,20 @@ export default function PageTreeNode({
           </div>
         )}
       </div>
+      {isExpanded && childrenQ.isLoading && (
+        <div
+          className="flex items-center gap-1 py-1 text-[11px] text-neutral-400"
+          style={{ paddingLeft: `${(depth + 1) * 14 + 8}px` }}
+        >
+          <Loader2 size={11} className="animate-spin" /> Loading…
+        </div>
+      )}
       {isExpanded &&
-        children.map((child) => (
+        (childrenQ.data ?? []).map((child) => (
           <PageTreeNode
-            key={child.page.id}
+            key={child.id}
             node={child}
+            workspaceId={workspaceId}
             depth={depth + 1}
             slug={slug}
             currentPageId={currentPageId}

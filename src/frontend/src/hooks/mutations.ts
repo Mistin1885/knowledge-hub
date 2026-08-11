@@ -28,6 +28,7 @@ export function useCreatePage(workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
     },
   });
 }
@@ -41,6 +42,7 @@ export function useUpdatePage(pageId: string, workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
     },
   });
 }
@@ -53,6 +55,7 @@ export function useDeletePage(workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       qc.invalidateQueries({ queryKey: ['tags', workspaceId] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
     },
   });
 }
@@ -100,6 +103,7 @@ export function useUploadFiles(workspaceId: string) {
       });
       for (const page of uploaded) qc.setQueryData(['page', page.id], page);
       qc.invalidateQueries({ queryKey: ['children'], refetchType: 'none' });
+      qc.invalidateQueries({ queryKey: ['vault-tree', workspaceId] });
       window.setTimeout(() => {
         void qc.invalidateQueries({ queryKey: ['pages', workspaceId] });
       }, 300);
