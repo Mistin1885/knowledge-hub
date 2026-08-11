@@ -7,15 +7,10 @@ import { pageApi } from '../../api/endpoints';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { ancestorIds, buildPageTree } from '../../lib/tree';
-import {
-  importVaultFiles,
-  type ImportProgress,
-  type ImportResult,
-} from '../../lib/importMd';
 import { ConfirmDialog, PromptDialog } from '../ui/Modal';
 import { EmptyState, Spinner } from '../ui/primitives';
 import PageTreeNode, { PAGE_DND_TYPE, type TreeActions } from './PageTreeNode';
-import ImportStatus from './ImportStatus';
+import { useImportManager } from '../imports/ImportManager';
 
 function cnRootDrop(active: boolean): string {
   return active
@@ -33,6 +28,7 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
   const createPage = useCreatePage(workspace.id);
   const deletePage = useDeletePage(workspace.id);
   const uploadFiles = useUploadFiles(workspace.id);
+  const { startImport } = useImportManager();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const importDirInputRef = useRef<HTMLInputElement>(null);
@@ -43,8 +39,6 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
   const [rootDragOver, setRootDragOver] = useState(false);
   const [uploadTarget, setUploadTarget] = useState<Page | null>(null);
   const [importTarget, setImportTarget] = useState<Page | null>(null);
-  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const pages = useMemo(() => pagesQ.data ?? [], [pagesQ.data]);
   const tree = useMemo(() => buildPageTree(pages), [pages]);
@@ -72,22 +66,11 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
 
   const runImport = async (files: File[], parent: Page | null) => {
     if (files.length === 0) return;
-    setImportResult(null);
     if (parent) setExpanded((prev) => new Set(prev).add(parent.id));
     try {
-      const result = await importVaultFiles(
-        workspace.id,
-        files,
-        parent?.id ?? null,
-        setImportProgress,
-      );
-      setImportResult(result);
+      await startImport(workspace.id, files, parent?.id ?? null);
     } finally {
-      setImportProgress(null);
       setImportTarget(null);
-      qc.invalidateQueries({ queryKey: ['pages', workspace.id] });
-      qc.invalidateQueries({ queryKey: ['tags', workspace.id] });
-      qc.invalidateQueries({ queryKey: ['children'] });
     }
   };
 
@@ -218,7 +201,6 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
       {uploadFiles.isError && (
         <p className="mb-1 px-2 py-1 text-[11px] text-red-600">File upload failed.</p>
       )}
-      <ImportStatus progress={importProgress} result={importResult} />
       {tree.map((node) => (
         <PageTreeNode
           key={node.page.id}

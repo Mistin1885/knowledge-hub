@@ -46,10 +46,10 @@ export function useTags(workspaceId: string | undefined) {
   });
 }
 
-export function useGraph(workspaceId: string, withTags: boolean) {
+export function useGraph(workspaceId: string, withTags: boolean, limit = 100) {
   return useQuery({
-    queryKey: ['graph', workspaceId, withTags],
-    queryFn: () => workspaceApi.graph(workspaceId, withTags),
+    queryKey: ['graph', workspaceId, withTags, limit],
+    queryFn: () => workspaceApi.graph(workspaceId, withTags, limit),
     placeholderData: keepPreviousData,
   });
 }

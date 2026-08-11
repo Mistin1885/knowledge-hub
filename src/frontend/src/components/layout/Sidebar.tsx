@@ -1,20 +1,14 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 import { FileText, Folder, FolderUp, FileUp, Loader2, Plus, Search } from 'lucide-react';
 import type { Workspace } from '../../api/types';
 import { useCreatePage, useUploadFiles } from '../../hooks/mutations';
-import {
-  importVaultFiles,
-  type ImportProgress,
-  type ImportResult,
-} from '../../lib/importMd';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 import { Input } from '../ui/primitives';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import PageTree from '../sidebar/PageTree';
 import TagsSection from '../sidebar/TagsSection';
-import ImportStatus from '../sidebar/ImportStatus';
+import { useImportManager } from '../imports/ImportManager';
 
 export default function Sidebar({
   workspace,
@@ -25,18 +19,15 @@ export default function Sidebar({
 }) {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const createPage = useCreatePage(workspace.id);
   const uploadFiles = useUploadFiles(workspace.id);
+  const { isImporting, startImport } = useImportManager();
   const canEdit = workspace.my_role !== 'viewer';
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
   const vaultFileInputRef = useRef<HTMLInputElement>(null);
-  const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
-  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,26 +43,8 @@ export default function Sidebar({
 
   const runImport = async (list: FileList | null) => {
     if (!list || list.length === 0) return;
-    setImporting(true);
     setImportNote(null);
-    setImportResult(null);
-    try {
-      const result = await importVaultFiles(
-        workspace.id,
-        Array.from(list),
-        null,
-        setImportProgress,
-      );
-      setImportResult(result);
-    } catch {
-      setImportNote('Import failed.');
-    } finally {
-      setImporting(false);
-      setImportProgress(null);
-      qc.invalidateQueries({ queryKey: ['pages', workspace.id] });
-      qc.invalidateQueries({ queryKey: ['tags', workspace.id] });
-      qc.invalidateQueries({ queryKey: ['children'] });
-    }
+    await startImport(workspace.id, Array.from(list));
   };
 
   return (
@@ -99,11 +72,11 @@ export default function Sidebar({
               align="right"
               button={
                 <button
-                  disabled={createPage.isPending || importing}
+                  disabled={createPage.isPending || isImporting}
                   title="New page, folder, or import"
                   className="rounded p-1 text-neutral-400 transition-colors duration-150 hover:bg-neutral-100 hover:text-neutral-700"
                 >
-                  {importing ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  {isImporting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                 </button>
               }
             >
@@ -160,7 +133,6 @@ export default function Sidebar({
             {importNote}
           </p>
         )}
-        <ImportStatus progress={importProgress} result={importResult} />
         <PageTree workspace={workspace} />
         <TagsSection workspace={workspace} />
       </div>
@@ -172,14 +144,12 @@ export default function Sidebar({
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
           if (files.length) {
-            setImporting(true);
             uploadFiles.mutate(
               { files, parentId: null },
               {
                 onSuccess: () =>
                   setImportNote(`Uploaded ${files.length} file${files.length === 1 ? '' : 's'}.`),
                 onError: () => setImportNote('File upload failed.'),
-                onSettled: () => setImporting(false),
               },
             );
           }

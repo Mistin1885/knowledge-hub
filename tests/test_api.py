@@ -194,6 +194,41 @@ async def test_graph_related_orphans(client, alice):
     assert any(e["kind"] == "link" for e in graph["edges"])
     assert any(e["kind"] == "tag" for e in graph["edges"])
 
+    limited = (await client.get(f"/api/v1/workspaces/{wid}/graph?limit=2")).json()
+    limited_ids = {node["id"] for node in limited["nodes"]}
+    assert len(limited_ids) == 2
+    assert all(
+        edge["source"] in limited_ids and edge["target"] in limited_ids
+        for edge in limited["edges"]
+    )
+    assert (await client.get(f"/api/v1/workspaces/{wid}/graph?limit=0")).status_code == 422
+
+    other_ws = await make_workspace(client, "Other graph")
+    other_wid = other_ws["id"]
+    other_spoke = (
+        await client.post(
+            f"/api/v1/workspaces/{other_wid}/pages", json={"title": "Other Spoke"}
+        )
+    ).json()
+    other_hub = (
+        await client.post(
+            f"/api/v1/workspaces/{other_wid}/pages",
+            json={"title": "Other Hub", "content_md": "[[Other Spoke]]"},
+        )
+    ).json()
+    first_workspace_graph = (
+        await client.get(f"/api/v1/workspaces/{wid}/graph?limit=1000")
+    ).json()
+    assert {other_hub["id"], other_spoke["id"]}.isdisjoint(
+        {node["id"] for node in first_workspace_graph["nodes"]}
+    )
+    other_workspace_graph = (
+        await client.get(f"/api/v1/workspaces/{other_wid}/graph?limit=1000")
+    ).json()
+    assert {other_hub["id"], other_spoke["id"]} <= {
+        node["id"] for node in other_workspace_graph["nodes"]
+    }
+
     orphans = (await client.get(f"/api/v1/workspaces/{wid}/orphans")).json()
     assert [p["title"] for p in orphans] == ["Lonely"]
 

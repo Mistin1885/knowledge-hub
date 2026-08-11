@@ -101,7 +101,7 @@ stored and downloadable but are not rendered inline.
 - `GET /pages/{id}/links` → `{outgoing: [{page?, target_title, resolved, context}], unresolved: [...] }`
 - `GET /pages/{id}/related?limit=10` → `[{page, score, reasons: ["links","tags","semantic"]}]`
 - `GET /pages/{id}/mentions` → unlinked mentions `[{page, context}]` (title appears w/o link)
-- `GET /workspaces/{wid}/graph?tags=1` → `{nodes: [{id, title, icon, status, tag_count, link_count, is_tag?}], edges: [{source, target, kind: link|tag}]}`
+- `GET /workspaces/{wid}/graph?tags=1&limit=100` → workspace-scoped graph capped to 1–1000 nodes (default 100): `{nodes: [{id, title, icon, status, tag_count, link_count, is_tag?}], edges: [{source, target, kind: link|tag}]}`
 - `GET /workspaces/{wid}/orphans` → `[page]` (no in/out links)
 
 ## Search

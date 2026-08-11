@@ -68,9 +68,15 @@ async def unlinked_mentions(page_id: uuid.UUID, user: CurrentUser, s: DB):
 
 @router.get("/workspaces/{workspace_id}/graph", response_model=GraphOut)
 async def workspace_graph(
-    workspace_id: uuid.UUID, user: CurrentUser, s: DB, tags: int = Query(1)
+    workspace_id: uuid.UUID,
+    user: CurrentUser,
+    s: DB,
+    tags: int = Query(1),
+    limit: int = Query(100, ge=1, le=1000),
 ):
-    return await graph_service.workspace_graph(s, user, workspace_id, include_tags=bool(tags))
+    return await graph_service.workspace_graph(
+        s, user, workspace_id, include_tags=bool(tags), limit=limit
+    )
 
 
 @router.get("/workspaces/{workspace_id}/orphans", response_model=list[PageOut])

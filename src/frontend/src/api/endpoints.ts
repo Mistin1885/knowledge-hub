@@ -82,8 +82,10 @@ export const workspaceApi = {
     ),
   pages: (id: string) => http.get<Page[]>(`/workspaces/${id}/pages`),
   tags: (id: string) => http.get<TagInfo[]>(`/workspaces/${id}/tags`),
-  graph: (id: string, withTags: boolean) =>
-    http.get<GraphData>(`/workspaces/${id}/graph?tags=${withTags ? 1 : 0}`),
+  graph: (id: string, withTags: boolean, limit = 100) =>
+    http.get<GraphData>(
+      `/workspaces/${id}/graph?tags=${withTags ? 1 : 0}&limit=${encodeURIComponent(limit)}`,
+    ),
   orphans: (id: string) => http.get<Page[]>(`/workspaces/${id}/orphans`),
   exportUrl: (id: string) => `/api/v1/workspaces/${id}/export`,
   search: (id: string, params: SearchParams) =>
