@@ -14,13 +14,19 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 from pycrdt import XmlElement, XmlFragment, XmlText
 
-_md = MarkdownIt("commonmark").enable(["strikethrough", "table"])
+_md = MarkdownIt("commonmark", {"html": True}).enable(["strikethrough", "table"])
 
 TASK_PREFIXES = {"[ ] ": False, "[x] ": True, "[X] ": True}
 
 # metadata lives in the DB (edited via the Info panel); the editor doc holds
 # only the body, so frontmatter never round-trips through collab sessions
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n?", re.DOTALL)
+_STYLE_SPAN_OPEN_RE = re.compile(r"^<span\s+style=[\"']([^\"']*)[\"']\s*>$", re.IGNORECASE)
+_STYLE_SPAN_CLOSE_RE = re.compile(r"^</span\s*>$", re.IGNORECASE)
+_ALLOWED_STYLE_RE = re.compile(
+    r"(?:^|;)\s*(color|background-color)\s*:\s*(#[0-9a-f]{6})\s*(?=;|$)",
+    re.IGNORECASE,
+)
 
 # --- markdown -> fragment ---------------------------------------------------
 
@@ -90,7 +96,11 @@ def _render_table(tokens: list[Token], i: int, parent) -> int:
             cell = row.children.append(XmlElement(cell_tag))
             paragraph = cell.children.append(XmlElement("paragraph"))
             inline = next(
-                (candidate for candidate in tokens[j + 1 : cell_close] if candidate.type == "inline"),
+                (
+                    candidate
+                    for candidate in tokens[j + 1 : cell_close]
+                    if candidate.type == "inline"
+                ),
                 None,
             )
             if inline is not None:
@@ -103,9 +113,7 @@ def _render_table(tokens: list[Token], i: int, parent) -> int:
 def _render_list(tokens: list[Token], i: int, parent) -> int:
     open_tok = tokens[i]
     ordered = open_tok.type == "ordered_list_open"
-    close = _find_close(
-        tokens, i, "ordered_list_close" if ordered else "bullet_list_close"
-    )
+    close = _find_close(tokens, i, "ordered_list_close" if ordered else "bullet_list_close")
     # peek first item to detect a task list
     is_task = _list_is_tasklist(tokens, i + 1, close)
     if is_task:
@@ -159,7 +167,7 @@ def _strip_task_prefix(tokens: list[Token], start: int, end: int) -> None:
                 if tok.content.startswith(prefix) and tok.children:
                     first = tok.children[0]
                     if first.type == "text" and first.content.startswith(prefix):
-                        first.content = first.content[len(prefix):]
+                        first.content = first.content[len(prefix) :]
                     return
             return
 
@@ -231,7 +239,23 @@ def _render_inline(inline_tok: Token, parent) -> None:
             parent.children.append(XmlElement("hardBreak"))
             text_node = None
         elif t == "html_inline":
-            emit(child.content)
+            span_match = _STYLE_SPAN_OPEN_RE.match(child.content.strip())
+            if span_match:
+                style = {
+                    key.lower(): value.lower()
+                    for key, value in _ALLOWED_STYLE_RE.findall(span_match.group(1))
+                }
+                attrs = {}
+                if color := style.get("color"):
+                    attrs["color"] = color
+                if background := style.get("background-color"):
+                    attrs["backgroundColor"] = background
+                if attrs:
+                    marks["textStyle"] = attrs
+            elif _STYLE_SPAN_CLOSE_RE.match(child.content.strip()):
+                marks.pop("textStyle", None)
+            else:
+                emit(child.content)
 
 
 # --- fragment -> markdown ---------------------------------------------------
@@ -284,7 +308,11 @@ def _list_to_md(node, indent: str) -> str:
         if tag == "orderedList":
             bullet = f"{start + idx}. "
         elif tag == "taskList":
-            checked = str(dict(item.attributes).get("checked", "false")).lower() in ("true", "1", "1.0")
+            checked = str(dict(item.attributes).get("checked", "false")).lower() in (
+                "true",
+                "1",
+                "1.0",
+            )
             bullet = f"- [{'x' if checked else ' '}] "
         else:
             bullet = "- "
@@ -343,7 +371,11 @@ def _inline_children_to_md(node) -> str:
             attrs = dict(child.attributes)
             out.append(f"![{attrs.get('alt', '')}]({attrs.get('src', '')})")
         else:
-            out.append("".join(_text_to_md(c) for c in getattr(child, "children", []) if isinstance(c, XmlText)))
+            out.append(
+                "".join(
+                    _text_to_md(c) for c in getattr(child, "children", []) if isinstance(c, XmlText)
+                )
+            )
     return "".join(out)
 
 
@@ -364,5 +396,16 @@ def _text_to_md(text: XmlText) -> str:
         if "link" in marks and marks["link"] is not None:
             href = (marks["link"] or {}).get("href", "")
             piece = f"[{piece}]({href})"
+        if "textStyle" in marks and marks["textStyle"] is not None:
+            style = marks["textStyle"] or {}
+            declarations = []
+            if color := style.get("color"):
+                if re.fullmatch(r"#[0-9a-fA-F]{6}", str(color)):
+                    declarations.append(f"color: {str(color).lower()}")
+            if background := style.get("backgroundColor"):
+                if re.fullmatch(r"#[0-9a-fA-F]{6}", str(background)):
+                    declarations.append(f"background-color: {str(background).lower()}")
+            if declarations:
+                piece = f'<span style="{"; ".join(declarations)}">{piece}</span>'
         out.append(piece)
     return "".join(out)

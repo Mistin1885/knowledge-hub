@@ -24,7 +24,9 @@ class TestParser:
         assert meta == {} and tags == [] and body == "# Just content"
 
     def test_wikilinks(self):
-        links = parser.extract_links("See [[Page One]] and [[Page Two|alias]] and [[Page Three#sec]].")
+        links = parser.extract_links(
+            "See [[Page One]] and [[Page Two|alias]] and [[Page Three#sec]]."
+        )
         titles = {link.target_title for link in links}
         assert titles == {"Page One", "Page Two", "Page Three"}
         assert all(link.kind == LinkKind.WIKI for link in links)
@@ -52,7 +54,9 @@ class TestParser:
 
 class TestChunking:
     def test_split_by_heading(self):
-        chunks = chunk_markdown("intro text here padded out to minimum length ok\n\n## A\nbody a\n\n## B\nbody b", "T")
+        chunks = chunk_markdown(
+            "intro text here padded out to minimum length ok\n\n## A\nbody a\n\n## B\nbody b", "T"
+        )
         headings = [c.heading for c in chunks]
         assert None in headings and "A" in headings and "B" in headings
 
@@ -85,6 +89,20 @@ class TestYMarkdown:
     def test_cjk_marks_order(self):
         out = self.roundtrip("這是 **粗體** 和後面")
         assert out.strip() == "這是 **粗體** 和後面"
+
+    def test_text_and_background_colors_roundtrip(self):
+        md = '<span style="color: #337ea9; background-color: #cb912f">有顏色的文字</span>'
+        once = self.roundtrip(md)
+        twice = self.roundtrip(once)
+        assert once == twice
+        assert "color: #337ea9" in once
+        assert "background-color: #cb912f" in once
+
+    def test_text_style_rejects_unapproved_inline_styles(self):
+        out = self.roundtrip('<span style="font-size: 99px; color: red">文字</span>')
+        assert "font-size" not in out
+        assert "color: red" not in out
+        assert out.strip() == "文字"
 
     def test_empty(self):
         assert self.roundtrip("") == ""

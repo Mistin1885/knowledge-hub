@@ -6,6 +6,7 @@ import {
   Download,
   File as FileIcon,
   FileImage,
+  FileDown,
   FileText,
   FileUp,
   Folder,
@@ -246,6 +247,16 @@ export default function PageTreeNode({
                       actions.onRename(page);
                     }}
                   />
+                  {page.node_type !== 'file' && !page.is_folder && (
+                    <MenuItem
+                      icon={<FileDown size={13} />}
+                      label="Export as .pdf"
+                      onClick={() => {
+                        close();
+                        downloadFile(pageApi.exportPdfUrl(page.id));
+                      }}
+                    />
+                  )}
                   {page.node_type !== 'file' && (
                     <MenuItem
                       icon={<FolderInput size={13} />}

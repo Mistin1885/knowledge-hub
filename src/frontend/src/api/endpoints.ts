@@ -155,6 +155,7 @@ export const pageApi = {
     }),
   remove: (id: string) => http.delete(`/pages/${id}`),
   exportUrl: (id: string) => `/api/v1/pages/${id}/export`,
+  exportPdfUrl: (id: string) => `/api/v1/pages/${id}/export.pdf`,
   versions: (id: string) => http.get<PageVersion[]>(`/pages/${id}/versions`),
   version: (id: string, versionId: string) =>
     http.get<PageVersionDetail>(`/pages/${id}/versions/${versionId}`),

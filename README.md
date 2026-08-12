@@ -3,7 +3,7 @@
 公司內部自架的協作知識庫：Obsidian 式 `[[雙向連結]]` × Notion 式即時多人協作 × MCP 讓 AI agent 直接查詢。
 
 - **多人即時協作編輯**（Yjs CRDT，衝突自動合併、離線重連自動同步、live cursors）
-- **Markdown 為本**：所有內容以 markdown 儲存，可整庫匯出成 Obsidian 相容 vault
+- **Markdown 為本**：所有內容以 markdown 儲存，可整庫匯出成 Obsidian 相容 vault，單頁亦可匯出成保留圖片的 PDF
 - **雙向連結**：`[[頁面標題]]`、backlinks、unlinked mentions、related pages、graph view
 - **組織能力**：workspace / page tree / folders / tags / typed metadata（frontmatter 自動同步）/ status / owner
 - **搜尋**：全文（中英文皆可，tsvector + trigram）＋語意搜尋（pgvector，接任何 OpenAI-compatible embeddings endpoint）

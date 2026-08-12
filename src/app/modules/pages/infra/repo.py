@@ -49,9 +49,7 @@ async def children_count(s: AsyncSession, page_id: uuid.UUID) -> int:
     return (await s.scalar(select(func.count()).where(Page.parent_id == page_id))) or 0
 
 
-async def list_children(
-    s: AsyncSession, page_id: uuid.UUID, visibility_filter
-) -> list[Page]:
+async def list_children(s: AsyncSession, page_id: uuid.UUID, visibility_filter) -> list[Page]:
     return list(
         await s.scalars(
             select(Page)
@@ -62,7 +60,9 @@ async def list_children(
     )
 
 
-async def max_sibling_position(s: AsyncSession, workspace_id: uuid.UUID, parent_id: uuid.UUID | None) -> float:
+async def max_sibling_position(
+    s: AsyncSession, workspace_id: uuid.UUID, parent_id: uuid.UUID | None
+) -> float:
     q = select(func.max(Page.position)).where(Page.workspace_id == workspace_id)
     q = q.where(Page.parent_id == parent_id) if parent_id else q.where(Page.parent_id.is_(None))
     return (await s.scalar(q)) or 0.0
@@ -96,20 +96,26 @@ async def list_tree_level(
     visible_ids = select(Page.id).where(Page.workspace_id == workspace_id, visibility_filter)
     query = select(Page).where(Page.workspace_id == workspace_id, visibility_filter)
     if parent_id is None:
-        query = query.where(
-            or_(Page.parent_id.is_(None), Page.parent_id.not_in(visible_ids))
-        )
+        query = query.where(or_(Page.parent_id.is_(None), Page.parent_id.not_in(visible_ids)))
     else:
         query = query.where(Page.parent_id == parent_id)
     return list(await s.scalars(query.order_by(Page.position, Page.created_at, Page.id)))
 
 
-async def tree_structure(s: AsyncSession, workspace_id: uuid.UUID, visibility_filter) -> list[tuple]:
+async def tree_structure(
+    s: AsyncSession, workspace_id: uuid.UUID, visibility_filter
+) -> list[tuple]:
     """Only the columns needed for recursive counts and has-children flags."""
     rows = await s.execute(
-        select(Page.id, Page.parent_id, Page.node_type, Page.is_folder).where(
-            Page.workspace_id == workspace_id, visibility_filter
+        select(
+            Page.id,
+            Page.parent_id,
+            Page.node_type,
+            Page.is_folder,
+            FileAsset.content_type,
         )
+        .outerjoin(FileAsset, FileAsset.node_id == Page.id)
+        .where(Page.workspace_id == workspace_id, visibility_filter)
     )
     return list(rows.tuples())
 
@@ -122,10 +128,7 @@ async def lock_workspace_tree(s: AsyncSession, workspace_id: uuid.UUID) -> None:
     opposite-direction deadlock that per-parent locking can create.
     """
     await s.execute(
-        select(Page.id)
-        .where(Page.workspace_id == workspace_id)
-        .order_by(Page.id)
-        .with_for_update()
+        select(Page.id).where(Page.workspace_id == workspace_id).order_by(Page.id).with_for_update()
     )
 
 
@@ -137,9 +140,13 @@ async def list_siblings(
     return list(await s.scalars(q.order_by(Page.position, Page.created_at, Page.id)))
 
 
-def folder_file_counts(nodes: list[Page]) -> dict[uuid.UUID, int]:
-    """Count all non-folder descendants for every folder in a flat tree."""
+def folder_file_counts(
+    nodes: list[Page], *, image_node_ids: set[uuid.UUID] | None = None
+) -> dict[uuid.UUID, int]:
+    """Count documents below folders, excluding images nested beneath pages."""
     by_parent: dict[uuid.UUID | None, list[Page]] = {}
+    by_id = {node.id: node for node in nodes}
+    image_ids = image_node_ids or set()
     for node in nodes:
         by_parent.setdefault(node.parent_id, []).append(node)
 
@@ -152,11 +159,14 @@ def folder_file_counts(nodes: list[Page]) -> dict[uuid.UUID, int]:
             return 0
         next_visiting = visiting | {node_id}
         total = 0
+        parent = by_id.get(node_id)
+        parent_is_folder = bool(parent and (parent.node_type == "folder" or parent.is_folder))
         for child in by_parent.get(node_id, []):
             if child.node_type == "folder" or child.is_folder:
                 total += count(child.id, next_visiting)
             else:
-                total += 1
+                if child.id not in image_ids or parent_is_folder:
+                    total += 1
                 total += count(child.id, next_visiting)
         memo[node_id] = total
         return total
@@ -168,11 +178,19 @@ def folder_file_counts(nodes: list[Page]) -> dict[uuid.UUID, int]:
 
 
 def folder_file_counts_from_rows(rows: list[tuple]) -> tuple[dict[uuid.UUID, int], set[uuid.UUID]]:
-    """Recursive non-folder counts and parents that have visible children."""
+    """Recursive document counts and parents that have visible children.
+
+    Images directly inside a folder count as documents. Images attached as
+    children of a regular page remain visible in the tree but do not inflate
+    any ancestor folder's document count.
+    """
     by_parent: dict[uuid.UUID | None, list[tuple]] = {}
     folders: set[uuid.UUID] = set()
-    for node_id, parent_id, node_type, is_folder in rows:
-        by_parent.setdefault(parent_id, []).append((node_id, node_type, is_folder))
+    node_kinds: dict[uuid.UUID, tuple[str, bool, bool]] = {}
+    for node_id, parent_id, node_type, is_folder, content_type in rows:
+        is_image = bool(content_type and content_type.startswith("image/"))
+        by_parent.setdefault(parent_id, []).append((node_id, node_type, is_folder, is_image))
+        node_kinds[node_id] = (node_type, is_folder, is_image)
         if node_type == "folder" or is_folder:
             folders.add(node_id)
 
@@ -184,11 +202,14 @@ def folder_file_counts_from_rows(rows: list[tuple]) -> tuple[dict[uuid.UUID, int
         if node_id in visiting:
             return 0
         total = 0
-        for child_id, node_type, is_folder in by_parent.get(node_id, []):
+        parent_type, parent_is_folder_flag, _parent_is_image = node_kinds[node_id]
+        parent_is_folder = parent_type == "folder" or parent_is_folder_flag
+        for child_id, node_type, is_folder, is_image in by_parent.get(node_id, []):
             if node_type == "folder" or is_folder:
                 total += count(child_id, visiting | {node_id})
             else:
-                total += 1
+                if not is_image or parent_is_folder:
+                    total += 1
                 total += count(child_id, visiting | {node_id})
         memo[node_id] = total
         return total
@@ -198,7 +219,9 @@ def folder_file_counts_from_rows(rows: list[tuple]) -> tuple[dict[uuid.UUID, int
     return memo, {parent_id for parent_id, children in by_parent.items() if parent_id and children}
 
 
-async def is_descendant(s: AsyncSession, ancestor_id: uuid.UUID, maybe_descendant_id: uuid.UUID) -> bool:
+async def is_descendant(
+    s: AsyncSession, ancestor_id: uuid.UUID, maybe_descendant_id: uuid.UUID
+) -> bool:
     """True if maybe_descendant is in the subtree of ancestor (cycle guard for moves)."""
     current = maybe_descendant_id
     for _ in range(100):
@@ -251,7 +274,9 @@ async def list_versions(s: AsyncSession, page_id: uuid.UUID) -> list[PageVersion
     )
 
 
-async def get_version(s: AsyncSession, page_id: uuid.UUID, version_id: uuid.UUID) -> PageVersion | None:
+async def get_version(
+    s: AsyncSession, page_id: uuid.UUID, version_id: uuid.UUID
+) -> PageVersion | None:
     return await s.scalar(
         select(PageVersion)
         .options(joinedload(PageVersion.author))
@@ -372,9 +397,7 @@ async def merge_page_metadata(s: AsyncSession, page_id: uuid.UUID, meta: dict[st
     await set_page_metadata(s, page_id, current)
 
 
-async def workspace_metadata_keys(
-    s: AsyncSession, workspace_id: uuid.UUID
-) -> dict[str, list[str]]:
+async def workspace_metadata_keys(s: AsyncSession, workspace_id: uuid.UUID) -> dict[str, list[str]]:
     rows = await s.execute(
         select(PageMetadata.key, PageMetadata.value)
         .join(Page, Page.id == PageMetadata.page_id)
@@ -396,7 +419,9 @@ async def workspace_metadata_keys(
 async def list_shares(s: AsyncSession, page_id: uuid.UUID) -> list[PageShare]:
     return list(
         await s.scalars(
-            select(PageShare).options(joinedload(PageShare.user)).where(PageShare.page_id == page_id)
+            select(PageShare)
+            .options(joinedload(PageShare.user))
+            .where(PageShare.page_id == page_id)
         )
     )
 
@@ -506,22 +531,16 @@ async def get_file_asset(s: AsyncSession, node_id: uuid.UUID) -> FileAsset | Non
 async def get_file_asset_by_legacy_id(
     s: AsyncSession, attachment_id: uuid.UUID
 ) -> FileAsset | None:
-    return await s.scalar(
-        select(FileAsset).where(FileAsset.legacy_attachment_id == attachment_id)
-    )
+    return await s.scalar(select(FileAsset).where(FileAsset.legacy_attachment_id == attachment_id))
 
 
-async def file_assets_for_nodes(
-    s: AsyncSession, node_ids: list[uuid.UUID]
-) -> list[FileAsset]:
+async def file_assets_for_nodes(s: AsyncSession, node_ids: list[uuid.UUID]) -> list[FileAsset]:
     if not node_ids:
         return []
     return list(await s.scalars(select(FileAsset).where(FileAsset.node_id.in_(node_ids))))
 
 
-async def delete_legacy_attachments(
-    s: AsyncSession, attachment_ids: list[uuid.UUID]
-) -> None:
+async def delete_legacy_attachments(s: AsyncSession, attachment_ids: list[uuid.UUID]) -> None:
     if attachment_ids:
         await s.execute(delete(Attachment).where(Attachment.id.in_(attachment_ids)))
 

@@ -171,6 +171,22 @@ body {
   @apply overflow-x-auto rounded-md border border-neutral-200 bg-neutral-100 p-3 font-mono text-[13px] leading-6;
 }
 
+.km-editor .ProseMirror .km-code-block {
+  @apply relative;
+}
+
+.km-editor .ProseMirror .km-code-block pre {
+  @apply pr-11;
+}
+
+.km-editor .ProseMirror .km-code-copy {
+  @apply absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded border border-neutral-200 bg-white/90 text-neutral-500 opacity-0 shadow-sm transition hover:bg-white hover:text-neutral-800 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-300;
+}
+
+.km-editor .ProseMirror .km-code-block:hover .km-code-copy {
+  @apply opacity-100;
+}
+
 .km-editor .ProseMirror pre code {
   @apply bg-transparent p-0;
 }
@@ -216,7 +232,8 @@ body {
 }
 
 .km-editor .ProseMirror img {
-  @apply max-w-full rounded-md border border-neutral-200;
+  @apply max-w-full cursor-default rounded-md border border-neutral-200;
+  user-select: all;
 }
 
 .km-editor .ProseMirror .tableWrapper {

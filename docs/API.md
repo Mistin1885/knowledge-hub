@@ -48,7 +48,7 @@ status ∈ draft|published|archived   visibility ∈ workspace|private
 ```
 
 - `GET /workspaces/{wid}/pages` → flat `[page]` (client builds tree from parent_id+position)
-- Folder entries include `file_count`, the live recursive count of non-folder descendants.
+- Folder entries include `file_count`, the live recursive document count. Images directly under a folder count; images nested under a regular page do not.
 - `POST /workspaces/{wid}/pages` `{title, parent_id?, content_md?, is_folder?, status?, visibility?, tags?, metadata?}` → `201 {pageDetail}`
 - `GET /pages/{id}` → `{pageDetail}`
 - `GET /pages/{id}/children` → `[{page, preview}]` — direct children ordered by position, with a plain-text content preview (folder view); per-item annotations live in the child's `metadata.note`
@@ -59,6 +59,7 @@ status ∈ draft|published|archived   visibility ∈ workspace|private
 - `GET /pages/{id}/versions/{vid}` → `{id, version, title, author, content_md, created_at, summary}`
 - `POST /pages/{id}/versions/{vid}/restore` → `{pageDetail}`
 - `GET /pages/{id}/export` → attachment download; regular page: `text/markdown` (`Title.md`), folder: `application/zip` of its visible subtree (folder structure preserved)
+- `GET /pages/{id}/export.pdf` → `application/pdf` for a regular page, with readable local images embedded in the document
 - `GET /workspaces/{wid}/export` → `application/zip` of all pages visible to the caller, mirroring the page tree
 - `GET /pages/{id}/shares` / `POST {user_id}` / `DELETE /pages/{id}/shares/{user_id}` — private-page shares
 

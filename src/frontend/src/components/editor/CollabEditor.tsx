@@ -27,6 +27,7 @@ import WikilinkSuggest from './WikilinkSuggest';
 import CreateLinkPopover from './CreateLinkPopover';
 import SelectionMenu from './SelectionMenu';
 import BlockDragHandle from './BlockDragHandle';
+import { ColoredTextStyle, CopyableCodeBlock } from './editorExtensions';
 
 interface ImageInsertResult {
   uploaded: number;
@@ -247,9 +248,15 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
     extensions: [
       StarterKit.configure({
         history: false,
+        codeBlock: false,
         dropcursor: { color: 'rgb(99 102 241)', width: 2 },
       }),
-      Link.configure({ openOnClick: false }),
+      CopyableCodeBlock,
+      ColoredTextStyle,
+      Link.configure({
+        openOnClick: true,
+        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+      }),
       Image.configure({ inline: true }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -314,6 +321,10 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
       <div
         className="km-editor relative"
         onContextMenu={(e) => {
+          if (e.target instanceof Element && e.target.closest('img')) {
+            setContextMenu(null);
+            return;
+          }
           // Custom formatting menu only when text is selected; otherwise keep
           // the native menu (spellcheck, paste, …).
           if (!editor || !editable || editor.state.selection.empty) return;
