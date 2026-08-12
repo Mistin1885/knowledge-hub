@@ -25,6 +25,15 @@ async def get(s: AsyncSession, page_id: uuid.UUID) -> Page | None:
     return await s.get(Page, page_id, options=[joinedload(Page.owner)])
 
 
+async def get_for_update(s: AsyncSession, page_id: uuid.UUID) -> Page | None:
+    """Load and row-lock a page for versioned writes.
+
+    Title autosaves and collaboration snapshots can overlap.  Locking the page
+    makes their read-increment-insert version sequence deterministic.
+    """
+    return await s.scalar(select(Page).where(Page.id == page_id).with_for_update(of=Page))
+
+
 async def list_workspace(s: AsyncSession, workspace_id: uuid.UUID, visibility_filter) -> list[Page]:
     return list(
         await s.scalars(

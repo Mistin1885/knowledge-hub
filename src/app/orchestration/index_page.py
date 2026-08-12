@@ -34,9 +34,6 @@ async def index_page(s: AsyncSession, page: Page, *, title_changed: bool = False
 
     await links_repo.replace_links(s, page, doc.links)
     await links_repo.resolve_pending_links_to(s, page)
-    if title_changed:
-        # links typed as [[New Title]] elsewhere may now resolve to this page
-        await links_repo.resolve_pending_links_to(s, page)
 
     if doc.frontmatter_tags:
         existing = set(await pages_repo.get_page_tags(s, page.id))
@@ -81,7 +78,7 @@ async def update_page(s: AsyncSession, user: User, page_id: uuid.UUID, fields: d
     from app.modules.collab.services import rooms
     from app.shared.exceptions import ConflictError
 
-    page = await pages_service.get_for_edit(s, user, page_id)
+    page = await pages_service.get_for_edit(s, user, page_id, for_update=True)
     if "content_md" in fields and fields["content_md"] is not None:
         if rooms.manager.has_active_room(page_id):
             raise ConflictError(
@@ -98,11 +95,11 @@ async def update_page(s: AsyncSession, user: User, page_id: uuid.UUID, fields: d
         await index_page(s, page, title_changed=title_changed)
         if page.node_type != NodeType.FILE:
             await pages_repo.add_version(s, page, user.id)
-    if path_changed:
-        from app.modules.pages.services import vault
-
-        for descendant, _path in await vault.subtree_paths(s, page):
-            await links_repo.resolve_pending_links_to(s, descendant)
+    if path_changed and not (content_changed or title_changed):
+        # Title/content changes already resolve once in index_page().  A pure
+        # move still needs one batch pass because descendant canonical paths
+        # changed too.
+        await links_repo.resolve_pending_links_to(s, page)
     await audit.record(
         s,
         workspace_id=page.workspace_id,
@@ -173,7 +170,7 @@ async def restore_version(
     from app.modules.collab.services import rooms
     from app.shared.exceptions import ConflictError
 
-    page = await pages_service.get_for_edit(s, user, page_id)
+    page = await pages_service.get_for_edit(s, user, page_id, for_update=True)
     if rooms.manager.has_active_room(page_id):
         raise ConflictError("Page is being edited in a live collaboration session")
     version = await pages_service.get_version(s, user, page_id, version_id)
@@ -204,7 +201,7 @@ async def snapshot_from_collab(
     captures the whole editing session."""
     from app.infra.db.models import User as UserModel
 
-    page = await pages_repo.get(s, page_id)
+    page = await pages_repo.get_for_update(s, page_id)
     if page is None or page.node_type == NodeType.FILE:
         return
     if page.content_md != content_md:

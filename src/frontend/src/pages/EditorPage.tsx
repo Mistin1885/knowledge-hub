@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import type { PageDetail, PageStatus } from '../api/types';
@@ -69,16 +69,55 @@ function PageHeader({ page, canEdit }: { page: PageDetail; canEdit: boolean }) {
   const [title, setTitle] = useState(page.title);
   const [icon, setIcon] = useState(page.icon ?? '');
   const update = useUpdatePage(page.id, page.workspace_id);
+  const updateRef = useRef(update);
+  const savedTitleRef = useRef(page.title);
+  const savedIconRef = useRef(page.icon ?? '');
+  const queuedRef = useRef<{ title?: string; icon?: string | null }>({});
+  const savingRef = useRef(false);
+  updateRef.current = update;
+
+  useEffect(() => {
+    savedTitleRef.current = page.title;
+    savedIconRef.current = page.icon ?? '';
+  }, [page.title, page.icon]);
+
+  async function drainUpdates() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      while (Object.keys(queuedRef.current).length > 0) {
+        const fields = queuedRef.current;
+        queuedRef.current = {};
+        try {
+          const saved = await updateRef.current.mutateAsync(fields);
+          savedTitleRef.current = saved.title;
+          savedIconRef.current = saved.icon ?? '';
+        } catch {
+          // A later local value remains queued and may still be saved.  When
+          // there is no newer value, keep the visible error instead of retrying
+          // forever against an unavailable server.
+        }
+      }
+    } finally {
+      savingRef.current = false;
+      if (Object.keys(queuedRef.current).length > 0) void drainUpdates();
+    }
+  }
+
+  const enqueueUpdate = (fields: { title?: string; icon?: string | null }) => {
+    queuedRef.current = { ...queuedRef.current, ...fields };
+    void drainUpdates();
+  };
 
   const saveTitle = useDebouncedCallback((value: string) => {
     const trimmed = value.trim();
-    if (trimmed && trimmed !== page.title) update.mutate({ title: trimmed });
-  }, 600);
+    if (trimmed && trimmed !== savedTitleRef.current) enqueueUpdate({ title: trimmed });
+  }, 800);
 
   const saveIcon = useDebouncedCallback((value: string) => {
     const trimmed = value.trim();
-    if (trimmed !== (page.icon ?? '')) update.mutate({ icon: trimmed || null });
-  }, 600);
+    if (trimmed !== savedIconRef.current) enqueueUpdate({ icon: trimmed || null });
+  }, 800);
 
   return (
     <div className="mb-2">
@@ -110,6 +149,9 @@ function PageHeader({ page, canEdit }: { page: PageDetail; canEdit: boolean }) {
           <StatusPill page={page} canEdit={canEdit} />
         </div>
       </div>
+      {update.isError && (
+        <p className="mt-1 text-xs text-red-600">Couldn’t save the latest title or icon.</p>
+      )}
     </div>
   );
 }

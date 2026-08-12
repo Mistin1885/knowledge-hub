@@ -19,8 +19,10 @@ async def get_for_read(s: AsyncSession, user: User, page_id: uuid.UUID) -> Page:
     return page
 
 
-async def get_for_edit(s: AsyncSession, user: User, page_id: uuid.UUID) -> Page:
-    page = await repo.get(s, page_id)
+async def get_for_edit(
+    s: AsyncSession, user: User, page_id: uuid.UUID, *, for_update: bool = False
+) -> Page:
+    page = await (repo.get_for_update(s, page_id) if for_update else repo.get(s, page_id))
     if page is None:
         raise NotFoundError("Page not found")
     await policy.require_page_edit(s, user, page)

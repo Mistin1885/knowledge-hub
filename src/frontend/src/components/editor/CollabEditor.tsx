@@ -28,24 +28,76 @@ import CreateLinkPopover from './CreateLinkPopover';
 import SelectionMenu from './SelectionMenu';
 import BlockDragHandle from './BlockDragHandle';
 
-/** Upload image files as page attachments and insert image nodes at `pos`. */
-async function insertImagesAt(view: EditorView, pageId: string, files: File[], pos: number) {
-  let insertAt = pos;
-  for (const file of files) {
-    try {
-      const att = await pageApi.uploadAttachment(pageId, file);
-      const { state } = view;
-      const node = state.schema.nodes.image.create({
-        src: att.preview_url ?? att.url,
-        alt: att.filename,
-      });
-      const at = Math.min(insertAt, state.doc.content.size);
-      view.dispatch(state.tr.insert(at, node));
-      insertAt = at + node.nodeSize;
-    } catch (err) {
-      console.error('Image upload failed:', err);
+interface ImageInsertResult {
+  uploaded: number;
+  failed: number;
+}
+
+function findImageAt(view: EditorView, src: string): { pos: number; attrs: Record<string, unknown> } | null {
+  let match: { pos: number; attrs: Record<string, unknown> } | null = null;
+  view.state.doc.descendants((node, pos) => {
+    if (!match && node.type === view.state.schema.nodes.image && node.attrs.src === src) {
+      match = { pos, attrs: node.attrs as Record<string, unknown> };
+      return false;
     }
+    return true;
+  });
+  return match;
+}
+
+function replacePendingImage(view: EditorView, localSrc: string, remoteSrc: string) {
+  if (view.isDestroyed) return;
+  const match = findImageAt(view, localSrc);
+  if (!match) return;
+  view.dispatch(
+    view.state.tr.setNodeMarkup(match.pos, undefined, { ...match.attrs, src: remoteSrc }),
+  );
+}
+
+function removePendingImage(view: EditorView, localSrc: string) {
+  if (view.isDestroyed) return;
+  const match = findImageAt(view, localSrc);
+  if (!match) return;
+  const node = view.state.doc.nodeAt(match.pos);
+  if (node) view.dispatch(view.state.tr.delete(match.pos, match.pos + node.nodeSize));
+}
+
+/** Insert local previews immediately, then replace them with committed attachment URLs. */
+async function insertImagesAt(
+  view: EditorView,
+  pageId: string,
+  files: File[],
+  pos: number,
+): Promise<ImageInsertResult> {
+  let insertAt = pos;
+  const pending = files.map((file) => ({ file, localSrc: URL.createObjectURL(file) }));
+  let transaction = view.state.tr;
+  for (const { file, localSrc } of pending) {
+    const node = view.state.schema.nodes.image.create({ src: localSrc, alt: file.name });
+    const at = Math.min(insertAt, transaction.doc.content.size);
+    transaction = transaction.insert(at, node);
+    insertAt = at + node.nodeSize;
   }
+  if (transaction.docChanged) view.dispatch(transaction);
+
+  const results = await Promise.allSettled(
+    pending.map(async ({ file, localSrc }) => {
+      try {
+        const att = await pageApi.uploadAttachment(pageId, file);
+        replacePendingImage(view, localSrc, att.preview_url ?? att.url);
+      } catch (err) {
+        removePendingImage(view, localSrc);
+        throw err;
+      } finally {
+        URL.revokeObjectURL(localSrc);
+      }
+    }),
+  );
+  for (const result of results) {
+    if (result.status === 'rejected') console.error('Image upload failed:', result.reason);
+  }
+  const failed = results.filter((result) => result.status === 'rejected').length;
+  return { uploaded: results.length - failed, failed };
 }
 
 function imageFiles(list: DataTransfer | null): File[] {
@@ -69,6 +121,8 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
   const [status, setStatus] = useState<CollabStatus>('connecting');
   const [forbidden, setForbidden] = useState(false);
   const [peers, setPeers] = useState<PeerUser[]>([]);
+  const [imageUploads, setImageUploads] = useState(0);
+  const [imageUploadError, setImageUploadError] = useState(false);
   const [autocomplete, setAutocomplete] = useState<WikilinkAutocompleteState | null>(null);
   const [createLink, setCreateLink] = useState<{ title: string; x: number; y: number } | null>(
     null,
@@ -154,6 +208,20 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
   const autocompleteRef = useRef(handleAutocomplete);
   autocompleteRef.current = handleAutocomplete;
 
+  const uploadImages = (view: EditorView, files: File[], pos: number) => {
+    setImageUploadError(false);
+    setImageUploads((count) => count + files.length);
+    void insertImagesAt(view, pageId, files, pos)
+      .then(({ failed }) => {
+        if (failed) setImageUploadError(true);
+      })
+      .catch((err) => {
+        console.error('Image upload failed:', err);
+        setImageUploadError(true);
+      })
+      .finally(() => setImageUploads((count) => Math.max(0, count - files.length)));
+  };
+
   const editor = useEditor({
     editable,
     editorProps: {
@@ -163,7 +231,7 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
         const files = imageFiles(event.clipboardData);
         if (files.length === 0 || !view.editable) return false;
         event.preventDefault();
-        void insertImagesAt(view, pageId, files, view.state.selection.to);
+        uploadImages(view, files, view.state.selection.to);
         return true;
       },
       handleDrop: (view, event, _slice, moved) => {
@@ -172,7 +240,7 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
         if (files.length === 0 || !view.editable) return false;
         event.preventDefault();
         const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
-        void insertImagesAt(view, pageId, files, coords?.pos ?? view.state.selection.to);
+        uploadImages(view, files, coords?.pos ?? view.state.selection.to);
         return true;
       },
     },
@@ -233,7 +301,15 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
     <div>
       <div className="mb-3 flex h-7 items-center justify-between">
         <ConnectionIndicator status={status} />
-        <PresenceAvatars peers={peers} />
+        <div className="flex items-center gap-3">
+          {imageUploads > 0 && (
+            <span className="text-[11px] text-neutral-500">Uploading {imageUploads} image…</span>
+          )}
+          {imageUploadError && imageUploads === 0 && (
+            <span className="text-[11px] text-red-600">Image upload failed. Please paste again.</span>
+          )}
+          <PresenceAvatars peers={peers} />
+        </div>
       </div>
       <div
         className="km-editor relative"
