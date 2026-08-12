@@ -20,9 +20,15 @@ async def resolve_title(
 async def replace_links(
     s: AsyncSession, source_page: Page, links: list[ParsedLink]
 ) -> None:
+    from app.modules.pages.services import vault
+
     await s.execute(delete(PageLink).where(PageLink.source_page_id == source_page.id))
+    resolved = await vault.resolve_targets(
+        s, source_page.workspace_id, [link.target_title for link in links]
+    )
     for link in links:
-        target_id = await resolve_title(s, source_page.workspace_id, link.target_title)
+        target = resolved.get(link.target_title)
+        target_id = target.id if target else None
         if target_id == source_page.id:
             target_id = None if link.target_title.lower() != source_page.title.lower() else target_id
         s.add(
@@ -38,7 +44,9 @@ async def replace_links(
 
 
 async def resolve_pending_links_to(s: AsyncSession, page: Page) -> None:
-    """Resolve pending title/path links that now point at ``page``."""
+    """Batch-resolve pending links after the Vault namespace changes."""
+    from app.modules.pages.services import vault
+
     source_ids = select(Page.id).where(Page.workspace_id == page.workspace_id)
     pending = list(
         await s.scalars(
@@ -47,9 +55,13 @@ async def resolve_pending_links_to(s: AsyncSession, page: Page) -> None:
             )
         )
     )
+    resolved = await vault.resolve_targets(
+        s, page.workspace_id, [link.target_title for link in pending]
+    )
     for link in pending:
-        if await resolve_title(s, page.workspace_id, link.target_title) == page.id:
-            link.target_page_id = page.id
+        target = resolved.get(link.target_title)
+        if target is not None:
+            link.target_page_id = target.id
 
 
 async def unresolve_links_to(s: AsyncSession, page_id: uuid.UUID) -> None:

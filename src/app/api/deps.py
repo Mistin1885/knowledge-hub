@@ -21,7 +21,11 @@ async def get_db() -> AsyncIterator[AsyncSession]:
             raise
 
 
-DB = Annotated[AsyncSession, Depends(get_db)]
+# Close the request transaction before FastAPI sends the response.  Write
+# endpoints return URLs and authoritative objects that the browser immediately
+# reads/refetches; request-scoped cleanup would otherwise let those follow-up
+# requests race the commit and observe stale rows or transient 404s.
+DB = Annotated[AsyncSession, Depends(get_db, scope="function")]
 
 
 async def _resolve_user(

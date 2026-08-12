@@ -1,0 +1,19 @@
+name: knowledge-hub-test
+
+services:
+  db:
+    ports:
+      - "${KM_TEST_DB_PORT:-15433}:5432"
+    volumes:
+      - test_postgres:/var/lib/postgresql/data
+
+  app:
+    image: knowledge-hub-app:test
+    ports: !override
+      - "${KM_TEST_PORT:-18080}:8000"
+    volumes:
+      - test_uploads:/srv/knowledge-hub/data/uploads
+
+volumes:
+  test_postgres:
+  test_uploads:

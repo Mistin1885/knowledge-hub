@@ -639,31 +639,67 @@ async def subtree_paths(s: AsyncSession, node: Page) -> list[tuple[Page, str]]:
 async def resolve_target(
     s: AsyncSession, workspace_id: uuid.UUID, target: str
 ) -> Page | None:
-    raw = target.split("#", 1)[0].strip().strip("/")
-    if not raw:
-        return None
+    return (await resolve_targets(s, workspace_id, [target])).get(target)
+
+
+async def resolve_targets(
+    s: AsyncSession, workspace_id: uuid.UUID, targets: list[str]
+) -> dict[str, Page | None]:
+    """Resolve many Vault targets from one workspace snapshot.
+
+    The old pending-link loop loaded every full page once *per unresolved link*.
+    Real Vaults can have thousands of nodes, so a single create/upload became an
+    N x workspace scan.  Build the path/title indexes once and batch the alias
+    fallback instead.
+    """
+    unique_targets = list(dict.fromkeys(targets))
+    result: dict[str, Page | None] = {target: None for target in unique_targets}
+    raw_by_target = {
+        target: target.split("#", 1)[0].strip().strip("/") for target in unique_targets
+    }
+    if not any(raw_by_target.values()):
+        return result
+
     nodes = await repo.list_workspace(s, workspace_id, Page.id.is_not(None))
     paths = _paths_for_nodes(nodes)
-    exact: list[Page] = []
-    basename: list[Page] = []
+    by_id = {node.id: node for node in nodes}
+    by_path: dict[str, list[Page]] = {}
+    by_title: dict[str, list[Page]] = {}
+    markdown_by_title: dict[str, list[Page]] = {}
     for node in nodes:
-        if paths[node.id].lower() == raw.lower():
-            exact.append(node)
-        if node.title.lower() == raw.lower() or (
-            node.node_type == NodeType.MARKDOWN
-            and node.title.lower() == re.sub(r"\.md$", "", raw, flags=re.IGNORECASE).lower()
-        ):
-            basename.append(node)
-    if len(exact) == 1:
-        return exact[0]
-    if len(basename) == 1:
-        return basename[0]
-    alias = await s.scalar(
-        select(NodeAlias).where(
-            NodeAlias.workspace_id == workspace_id, func.lower(NodeAlias.path) == raw.lower()
+        by_path.setdefault(paths[node.id].lower(), []).append(node)
+        by_title.setdefault(node.title.lower(), []).append(node)
+        if node.node_type == NodeType.MARKDOWN:
+            markdown_by_title.setdefault(node.title.lower(), []).append(node)
+
+    unresolved: dict[str, str] = {}
+    for target, raw in raw_by_target.items():
+        if not raw:
+            continue
+        exact = by_path.get(raw.lower(), [])
+        if len(exact) == 1:
+            result[target] = exact[0]
+            continue
+        basename_ids = {node.id for node in by_title.get(raw.lower(), [])}
+        without_md = re.sub(r"\.md$", "", raw, flags=re.IGNORECASE).lower()
+        basename_ids.update(node.id for node in markdown_by_title.get(without_md, []))
+        if len(basename_ids) == 1:
+            result[target] = by_id[next(iter(basename_ids))]
+            continue
+        unresolved[target] = raw.lower()
+
+    if unresolved:
+        aliases = await s.scalars(
+            select(NodeAlias).where(
+                NodeAlias.workspace_id == workspace_id,
+                func.lower(NodeAlias.path).in_(set(unresolved.values())),
+            )
         )
-    )
-    return await repo.get(s, alias.node_id) if alias else None
+        alias_by_path = {alias.path.lower(): alias.node_id for alias in aliases}
+        for target, raw in unresolved.items():
+            if node_id := alias_by_path.get(raw):
+                result[target] = by_id.get(node_id) or await repo.get(s, node_id)
+    return result
 
 
 async def ensure_move_allowed(s: AsyncSession, node: Page, parent_id: uuid.UUID | None) -> None:

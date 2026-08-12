@@ -1,5 +1,7 @@
 """API-level tests: auth, RBAC, pages, links, search, versions, comments."""
 
+import asyncio
+
 from tests.conftest import make_workspace, register_and_login
 
 
@@ -86,6 +88,61 @@ async def test_page_lifecycle_links_and_search(client, alice):
     assert (await client.delete(f"/api/v1/pages/{b['id']}")).status_code == 204
     links = (await client.get(f"/api/v1/pages/{a['id']}/links")).json()["outgoing"]
     assert links[0]["resolved"] is False
+
+
+async def test_concurrent_title_autosaves_use_distinct_versions(client, alice, monkeypatch):
+    from app.orchestration import index_page as pipeline
+
+    ws = await make_workspace(client, "Concurrent autosave")
+    page = (
+        await client.post(
+            f"/api/v1/workspaces/{ws['id']}/pages", json={"title": "Original"}
+        )
+    ).json()
+
+    original_index_page = pipeline.index_page
+
+    async def slow_index_page(session, target, *, title_changed=False):
+        # Keep the first write open long enough for a second debounced PATCH to
+        # overlap.  The page row lock must serialize their version increments.
+        await asyncio.sleep(0.05)
+        await original_index_page(session, target, title_changed=title_changed)
+
+    monkeypatch.setattr(pipeline, "index_page", slow_index_page)
+    first, second = await asyncio.gather(
+        client.patch(f"/api/v1/pages/{page['id']}", json={"title": "First update"}),
+        client.patch(f"/api/v1/pages/{page['id']}", json={"title": "Second update"}),
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    versions = (await client.get(f"/api/v1/pages/{page['id']}/versions")).json()
+    assert [version["version"] for version in versions] == [3, 2, 1]
+    assert {version["title"] for version in versions[:2]} == {"First update", "Second update"}
+
+
+async def test_link_resolution_loads_workspace_once_per_batch(client, alice, monkeypatch):
+    from app.modules.pages.services import vault
+
+    ws = await make_workspace(client, "Batch resolution")
+    calls = 0
+    original_list_workspace = vault.repo.list_workspace
+
+    async def counted_list_workspace(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return await original_list_workspace(*args, **kwargs)
+
+    monkeypatch.setattr(vault.repo, "list_workspace", counted_list_workspace)
+    response = await client.post(
+        f"/api/v1/workspaces/{ws['id']}/pages",
+        json={"title": "Links", "content_md": "[[One]] [[Two]] [[Three]] [[Four]]"},
+    )
+
+    assert response.status_code == 201, response.text
+    # One snapshot resolves the new page's outgoing links and one resolves all
+    # workspace pending links.  The count must not grow with the number of links.
+    assert calls == 2
 
 
 async def test_rbac_and_private_pages(client, alice):
