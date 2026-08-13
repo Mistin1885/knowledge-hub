@@ -6,7 +6,7 @@ import re
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -31,6 +31,7 @@ from reportlab.platypus import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infra.db.models import User
+from app.modules.collab.domain.y_markdown import normalize_internal_image_markdown
 from app.modules.pages.services import attachments as attachments_service
 from app.modules.pages.services import pages as pages_service
 from app.modules.pages.services import vault
@@ -38,7 +39,7 @@ from app.modules.pages.services import vault
 _md = MarkdownIt("commonmark", {"html": True}).enable(["strikethrough", "table"])
 _INTERNAL_IMAGE_RE = re.compile(
     r"^/api/v1/(?:files/([0-9a-f-]{36})/preview|"
-    r"attachments/([0-9a-f-]{36})(?:/[^\s]+)?)$",
+    r"attachments/([0-9a-f-]{36})(?:/.*)?)$",
     re.IGNORECASE,
 )
 _STYLE_OPEN_RE = re.compile(r"^<span\s+style=[\"']([^\"']*)[\"']\s*>$", re.IGNORECASE)
@@ -120,41 +121,57 @@ def _styles():
     }
 
 
-async def _local_images(s: AsyncSession, user: User, content: str) -> dict[str, Path]:
-    sources = set(re.findall(r"!\[[^\]]*\]\(([^)]+)\)", content))
-    result: dict[str, Path] = {}
-    for raw_source in sources:
-        source = raw_source.strip("<>")
-        match = _INTERNAL_IMAGE_RE.match(urlparse(source).path)
-        if not match:
+def _image_identity(source: str) -> tuple[str, uuid.UUID] | None:
+    match = _INTERNAL_IMAGE_RE.match(unquote(urlparse(source.strip("<>")).path))
+    if not match:
+        return None
+    if match.group(1):
+        return "file", uuid.UUID(match.group(1))
+    return "attachment", uuid.UUID(match.group(2))
+
+
+def _image_sources(tokens: list[Token]) -> set[str]:
+    return {
+        dict(child.attrs or {}).get("src", "")
+        for token in tokens
+        for child in (token.children or [])
+        if child.type == "image" and dict(child.attrs or {}).get("src")
+    }
+
+
+async def _local_images(
+    s: AsyncSession, user: User, tokens: list[Token]
+) -> dict[tuple[str, uuid.UUID], Path]:
+    result: dict[tuple[str, uuid.UUID], Path] = {}
+    for source in _image_sources(tokens):
+        identity = _image_identity(source)
+        if identity is None or identity in result:
             continue
         try:
-            if match.group(1):
-                _node, _asset, path, preview_kind = await vault.get_file(
-                    s, user, uuid.UUID(match.group(1))
-                )
+            kind, image_id = identity
+            if kind == "file":
+                _node, _asset, path, preview_kind = await vault.get_file(s, user, image_id)
                 if preview_kind == "image":
-                    result[source] = path
+                    result[identity] = path
             else:
-                attachment_id = uuid.UUID(match.group(2))
-                migrated = await vault.get_legacy_file(s, user, attachment_id)
+                migrated = await vault.get_legacy_file(s, user, image_id)
                 if migrated is not None:
                     _node, _asset, path, preview_kind = migrated
                     if preview_kind == "image":
-                        result[source] = path
+                        result[identity] = path
                 else:
-                    attachment, path = await attachments_service.open_for_read(
-                        s, user, attachment_id
-                    )
+                    attachment, path = await attachments_service.open_for_read(s, user, image_id)
                     if attachment.content_type.startswith("image/"):
-                        result[source] = path
+                        result[identity] = path
         except Exception:
             # A stale, missing, or newly private image should not abort export.
             continue
     return result
 
 
-def _inline_markup(children: list[Token], image_paths: dict[str, Path]) -> list[tuple[str, str]]:
+def _inline_markup(
+    children: list[Token], image_paths: dict[tuple[str, uuid.UUID], Path]
+) -> list[tuple[str, str]]:
     """Return ordered (kind, value) chunks where kind is text or image."""
     chunks: list[tuple[str, str]] = []
     text: list[str] = []
@@ -211,7 +228,8 @@ def _inline_markup(children: list[Token], image_paths: dict[str, Path]) -> list[
         elif kind == "image":
             flush()
             source = dict(child.attrs or {}).get("src", "")
-            path = image_paths.get(source)
+            identity = _image_identity(source)
+            path = image_paths.get(identity) if identity else None
             if path:
                 chunks.append(("image", f"{path}\0{child.content or ''}"))
             else:
@@ -229,10 +247,9 @@ def _scaled_image(path: Path, max_width: float, max_height: float) -> Image:
     return image
 
 
-def _story(content: str, image_paths: dict[str, Path], page_title: str):
+def _story(tokens: list[Token], image_paths: dict[tuple[str, uuid.UUID], Path], page_title: str):
     styles = _styles()
     story = [Paragraph(html.escape(page_title or "Untitled"), styles["title"])]
-    tokens = _md.parse(content or "")
     heading_level: int | None = None
     quote_depth = 0
     list_stack: list[dict[str, int | str]] = []
@@ -358,7 +375,9 @@ def _page_decorator(title: str) -> Callable:
 
 async def export_page_pdf(s: AsyncSession, user: User, page_id: uuid.UUID) -> tuple[str, bytes]:
     page = await pages_service.get_for_read(s, user, page_id)
-    image_paths = await _local_images(s, user, page.content_md or "")
+    content = normalize_internal_image_markdown(page.content_md or "")
+    tokens = _md.parse(content)
+    image_paths = await _local_images(s, user, tokens)
     buffer = io.BytesIO()
     document = SimpleDocTemplate(
         buffer,
@@ -372,7 +391,7 @@ async def export_page_pdf(s: AsyncSession, user: User, page_id: uuid.UUID) -> tu
     )
     decorator = _page_decorator(page.title or "Untitled")
     document.build(
-        _story(page.content_md or "", image_paths, page.title),
+        _story(tokens, image_paths, page.title),
         onFirstPage=decorator,
         onLaterPages=decorator,
     )

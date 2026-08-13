@@ -124,6 +124,20 @@ class TestYMarkdown:
         assert "![resolved](/api/v1/files/11111111-1111-1111-1111-111111111111/preview)" in once
         assert "![[unresolved image.png]]" in once
 
+    def test_internal_images_with_spaces_and_parentheses_remain_images(self):
+        md = (
+            "![one](/api/v1/attachments/11111111-1111-1111-1111-111111111111/one.png)\n\n"
+            "![two](/api/v1/attachments/22222222-2222-2222-2222-222222222222/two image.png)\n\n"
+            "![three](/api/v1/attachments/33333333-3333-3333-3333-333333333333/diagram (final).png)"
+        )
+        once = self.roundtrip(md)
+        twice = self.roundtrip(once)
+
+        assert once == twice
+        assert once.count("![") == 3
+        assert "two%20image.png" in once
+        assert "diagram%20%28final%29.png" in once
+
 
 class TestProtocol:
     def test_varuint(self):

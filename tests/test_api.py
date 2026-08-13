@@ -522,9 +522,10 @@ async def test_folder_children_with_preview(client, alice):
 
 
 async def test_export_page_folder_and_workspace(client, alice):
-    import base64
     import io
+    import struct
     import zipfile
+    import zlib
 
     from pypdf import PdfReader
 
@@ -552,19 +553,45 @@ async def test_export_page_folder_and_workspace(client, alice):
     assert 'filename="Setup.md"' in resp.headers["content-disposition"]
     assert resp.text == "# Setup\nSteps."
 
-    # PDF export embeds authenticated page images instead of leaving API URLs.
-    png = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    # PDF export embeds every authenticated page image, including URLs whose
+    # filenames need Markdown escaping.
+    def solid_png(red: int, green: int, blue: int) -> bytes:
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
+
+        width, height = 24, 16
+        header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+        scanlines = b"".join(b"\0" + bytes((red, green, blue)) * width for _ in range(height))
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(scanlines))
+            + chunk(b"IEND", b"")
+        )
+
+    image_urls = []
+    uploads = (
+        ("pixel.png", solid_png(220, 38, 38)),
+        ("second image.png", solid_png(34, 197, 94)),
+        ("diagram (final).png", solid_png(37, 99, 235)),
     )
-    uploaded = await client.post(
-        f"/api/v1/pages/{page['id']}/attachments",
-        files={"file": ("pixel.png", png, "image/png")},
+    for filename, png in uploads:
+        uploaded = await client.post(
+            f"/api/v1/pages/{page['id']}/attachments",
+            files={"file": (filename, png, "image/png")},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        image_urls.append(uploaded.json()["preview_url"])
+
+    image_markdown = "\n\n".join(
+        f"![Export image {index}]({url})" for index, url in enumerate(image_urls, start=1)
     )
-    assert uploaded.status_code == 201, uploaded.text
-    image_url = uploaded.json()["preview_url"]
     updated = await client.patch(
         f"/api/v1/pages/{page['id']}",
-        json={"content_md": f"# Setup\n\nSteps.\n\n![Pixel]({image_url})"},
+        json={
+            "content_md": f"# Setup\n\nSteps before images.\n\n{image_markdown}\n\nTail after images."
+        },
     )
     assert updated.status_code == 200, updated.text
     pdf = await client.get(f"/api/v1/pages/{page['id']}/export.pdf")
@@ -574,8 +601,11 @@ async def test_export_page_folder_and_workspace(client, alice):
     assert pdf.content.startswith(b"%PDF-")
     reader = PdfReader(io.BytesIO(pdf.content))
     assert len(reader.pages) >= 1
-    assert "Setup" in (reader.pages[0].extract_text() or "")
-    assert any(pdf_page.images for pdf_page in reader.pages)
+    extracted_text = "\n".join(pdf_page.extract_text() or "" for pdf_page in reader.pages)
+    assert "Setup" in extracted_text
+    assert "Tail after images." in extracted_text
+    assert all(f"Export image {index}" in extracted_text for index in range(1, 4))
+    assert sum(len(pdf_page.images) for pdf_page in reader.pages) == 3
 
     # folder -> zip of its subtree
     resp = await client.get(f"/api/v1/pages/{folder['id']}/export")
@@ -584,7 +614,12 @@ async def test_export_page_folder_and_workspace(client, alice):
     zf = zipfile.ZipFile(io.BytesIO(resp.content))
     assert "Setup/Setup.md" in zf.namelist()
     assert "Setup/pixel.png" in zf.namelist()
-    assert "![Pixel](<pixel.png>)" in zf.read("Setup/Setup.md").decode()
+    assert "Setup/second image.png" in zf.namelist()
+    assert "Setup/diagram (final).png" in zf.namelist()
+    exported_page = zf.read("Setup/Setup.md").decode()
+    assert "![Export image 1](<pixel.png>)" in exported_page
+    assert "![Export image 2](<second image.png>)" in exported_page
+    assert "![Export image 3](<diagram (final).png>)" in exported_page
 
     # workspace -> zip preserving folder structure
     resp = await client.get(f"/api/v1/workspaces/{wid}/export")
@@ -593,6 +628,8 @@ async def test_export_page_folder_and_workspace(client, alice):
     names = zf.namelist()
     assert "Guides/Setup/Setup.md" in names
     assert "Guides/Setup/pixel.png" in names
+    assert "Guides/Setup/second image.png" in names
+    assert "Guides/Setup/diagram (final).png" in names
     assert "Root note.md" in names
 
 

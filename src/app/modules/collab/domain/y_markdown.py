@@ -9,6 +9,7 @@ Wikilinks `[[Title]]` are plain text by design — the editor decorates them.
 """
 
 import re
+from urllib.parse import quote
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -27,13 +28,71 @@ _ALLOWED_STYLE_RE = re.compile(
     r"(?:^|;)\s*(color|background-color)\s*:\s*(#[0-9a-f]{6})\s*(?=;|$)",
     re.IGNORECASE,
 )
+_INTERNAL_IMAGE_START_RE = re.compile(
+    r"/api/v1/(?:files/[0-9a-f-]{36}/preview|attachments/[0-9a-f-]{36}(?:/|(?=\)))?)",
+    re.IGNORECASE,
+)
+
+
+def normalize_internal_image_markdown(markdown: str) -> str:
+    """Encode internal image destinations so spaces/parentheses stay valid Markdown."""
+    output: list[str] = []
+    cursor = 0
+    while True:
+        image_start = markdown.find("![", cursor)
+        if image_start < 0:
+            output.append(markdown[cursor:])
+            break
+        destination_start = markdown.find("](", image_start + 2)
+        if destination_start < 0 or "\n" in markdown[image_start:destination_start]:
+            output.append(markdown[cursor : image_start + 2])
+            cursor = image_start + 2
+            continue
+
+        source_start = destination_start + 2
+        if not _INTERNAL_IMAGE_START_RE.match(markdown, source_start):
+            output.append(markdown[cursor : image_start + 2])
+            cursor = image_start + 2
+            continue
+
+        depth = 0
+        source_end = source_start
+        while source_end < len(markdown):
+            char = markdown[source_end]
+            if char in "\r\n":
+                break
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            source_end += 1
+        if source_end >= len(markdown) or markdown[source_end] != ")":
+            output.append(markdown[cursor : image_start + 2])
+            cursor = image_start + 2
+            continue
+
+        source = markdown[source_start:source_end]
+        safe_source = quote(source, safe="/:?#[]@!$&'*+,;=%~._-")
+        output.append(markdown[cursor:source_start])
+        output.append(safe_source)
+        cursor = source_end
+    return "".join(output)
+
+
+def _image_to_md(alt: str, source: str) -> str:
+    safe_source = quote(source, safe="/:?#[]@!$&'*+,;=%~._-")
+    return f"![{alt}]({safe_source})"
+
 
 # --- markdown -> fragment ---------------------------------------------------
 
 
 def md_to_fragment(md: str, frag: XmlFragment) -> None:
     """Populate an (empty) fragment from markdown (frontmatter stripped)."""
-    tokens = _md.parse(_FRONTMATTER_RE.sub("", md or "", count=1))
+    body = normalize_internal_image_markdown(_FRONTMATTER_RE.sub("", md or "", count=1))
+    tokens = _md.parse(body)
     _render_blocks(tokens, 0, len(tokens), frag)
     if len(frag.children) == 0:
         frag.children.append(XmlElement("paragraph"))
@@ -290,7 +349,7 @@ def _block_to_md(node, indent: str) -> str | None:
         return indent + "---"
     if tag == "image":
         attrs = dict(node.attributes)
-        return f"{indent}![{attrs.get('alt', '')}]({attrs.get('src', '')})"
+        return indent + _image_to_md(attrs.get("alt", ""), attrs.get("src", ""))
     if tag in ("bulletList", "orderedList", "taskList"):
         return _list_to_md(node, indent)
     if tag == "table":
@@ -369,7 +428,7 @@ def _inline_children_to_md(node) -> str:
             out.append("  \n")
         elif getattr(child, "tag", None) == "image":
             attrs = dict(child.attributes)
-            out.append(f"![{attrs.get('alt', '')}]({attrs.get('src', '')})")
+            out.append(_image_to_md(attrs.get("alt", ""), attrs.get("src", "")))
         else:
             out.append(
                 "".join(
