@@ -139,7 +139,13 @@ class RoomManager:
                     room.awareness.pop(entry.client_id, None)
                 else:
                     room.awareness[entry.client_id] = entry
-            await self._broadcast(room, protocol.encode_awareness(bytes(payload)), exclude=ws)
+            # Echo awareness to the sender too. y-websocket refreshes the local
+            # awareness state about every 15 seconds and expects to receive that
+            # update back from the server. The echo is our application-level
+            # heartbeat: it keeps both y-websocket's 30-second receive watchdog
+            # and long-lived proxies such as Cloudflare from treating an idle
+            # collaboration session as dead.
+            await self._broadcast(room, protocol.encode_awareness(bytes(payload)), exclude=None)
 
         elif msg_type == protocol.MSG_QUERY_AWARENESS:
             if room.awareness:

@@ -1,3 +1,4 @@
+import time
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -8,6 +9,7 @@ from app.modules.collab.services import rooms
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.workspaces.services import policy
 from app.shared.constants import Permission
+from app.shared.logging import get_logger
 from app.shared.utils import stable_color
 
 router = APIRouter(tags=["collab"])  # REST endpoints under /api/v1
@@ -15,10 +17,13 @@ ws_router = APIRouter()  # WebSocket at root path per contract
 
 WS_UNAUTHENTICATED = 4401
 WS_FORBIDDEN = 4403
+log = get_logger(__name__)
 
 
 @ws_router.websocket("/collab/{page_id}")
 async def collab_socket(ws: WebSocket, page_id: uuid.UUID):
+    connected_at = time.monotonic()
+    cf_ray = ws.headers.get("cf-ray", "-")
     await ws.accept()
     async with session_factory() as s:
         user = await websocket_user(ws, s)
@@ -39,8 +44,16 @@ async def collab_socket(ws: WebSocket, page_id: uuid.UUID):
         while True:
             data = await ws.receive_bytes()
             await rooms.manager.handle_message(room, ws, data)
-    except WebSocketDisconnect:
-        pass
+    except WebSocketDisconnect as exc:
+        duration_ms = round((time.monotonic() - connected_at) * 1000)
+        log.info(
+            "Collab websocket disconnected page=%s user=%s code=%s duration_ms=%s cf_ray=%s",
+            page_id,
+            user.id,
+            exc.code,
+            duration_ms,
+            cf_ray,
+        )
     finally:
         await rooms.manager.disconnect(room, ws)
 

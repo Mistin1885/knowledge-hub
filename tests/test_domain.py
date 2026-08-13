@@ -154,6 +154,42 @@ class TestProtocol:
         decoded = protocol.decode_awareness_update(protocol.encode_awareness_update(entries))
         assert decoded == entries
 
+    async def test_awareness_is_echoed_to_sender_as_heartbeat(self):
+        import uuid
+
+        from pycrdt import Doc, XmlFragment
+
+        from app.modules.collab.services.rooms import Connection, Room, RoomManager
+
+        class FakeWebSocket:
+            def __init__(self):
+                self.sent: list[bytes] = []
+
+            async def send_bytes(self, message: bytes):
+                self.sent.append(message)
+
+        ws = FakeWebSocket()
+        doc = Doc()
+        room = Room(
+            page_id=uuid.uuid4(),
+            doc=doc,
+            frag=doc.get("default", type=XmlFragment),
+        )
+        room.connections[ws] = Connection(
+            ws=ws,
+            user_id=uuid.uuid4(),
+            can_edit=True,
+            display={"name": "Alice", "color": "#000000"},
+        )
+        entry = protocol.AwarenessEntry(123, 1, '{"user": {"name": "Alice"}}')
+        payload = protocol.encode_awareness_update([entry])
+        message = protocol.encode_awareness(payload)
+
+        await RoomManager().handle_message(room, ws, message)
+
+        assert ws.sent == [message]
+        assert room.awareness[123] == entry
+
 
 class TestSanitize:
     def test_keeps_normal_prose(self):
