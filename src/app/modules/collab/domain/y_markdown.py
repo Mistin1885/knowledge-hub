@@ -9,25 +9,90 @@ Wikilinks `[[Title]]` are plain text by design — the editor decorates them.
 """
 
 import re
+from urllib.parse import quote
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 from pycrdt import XmlElement, XmlFragment, XmlText
 
-_md = MarkdownIt("commonmark").enable(["strikethrough", "table"])
+_md = MarkdownIt("commonmark", {"html": True}).enable(["strikethrough", "table"])
 
 TASK_PREFIXES = {"[ ] ": False, "[x] ": True, "[X] ": True}
 
 # metadata lives in the DB (edited via the Info panel); the editor doc holds
 # only the body, so frontmatter never round-trips through collab sessions
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n?", re.DOTALL)
+_STYLE_SPAN_OPEN_RE = re.compile(r"^<span\s+style=[\"']([^\"']*)[\"']\s*>$", re.IGNORECASE)
+_STYLE_SPAN_CLOSE_RE = re.compile(r"^</span\s*>$", re.IGNORECASE)
+_ALLOWED_STYLE_RE = re.compile(
+    r"(?:^|;)\s*(color|background-color)\s*:\s*(#[0-9a-f]{6})\s*(?=;|$)",
+    re.IGNORECASE,
+)
+_INTERNAL_IMAGE_START_RE = re.compile(
+    r"/api/v1/(?:files/[0-9a-f-]{36}/preview|attachments/[0-9a-f-]{36}(?:/|(?=\)))?)",
+    re.IGNORECASE,
+)
+
+
+def normalize_internal_image_markdown(markdown: str) -> str:
+    """Encode internal image destinations so spaces/parentheses stay valid Markdown."""
+    output: list[str] = []
+    cursor = 0
+    while True:
+        image_start = markdown.find("![", cursor)
+        if image_start < 0:
+            output.append(markdown[cursor:])
+            break
+        destination_start = markdown.find("](", image_start + 2)
+        if destination_start < 0 or "\n" in markdown[image_start:destination_start]:
+            output.append(markdown[cursor : image_start + 2])
+            cursor = image_start + 2
+            continue
+
+        source_start = destination_start + 2
+        if not _INTERNAL_IMAGE_START_RE.match(markdown, source_start):
+            output.append(markdown[cursor : image_start + 2])
+            cursor = image_start + 2
+            continue
+
+        depth = 0
+        source_end = source_start
+        while source_end < len(markdown):
+            char = markdown[source_end]
+            if char in "\r\n":
+                break
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            source_end += 1
+        if source_end >= len(markdown) or markdown[source_end] != ")":
+            output.append(markdown[cursor : image_start + 2])
+            cursor = image_start + 2
+            continue
+
+        source = markdown[source_start:source_end]
+        safe_source = quote(source, safe="/:?#[]@!$&'*+,;=%~._-")
+        output.append(markdown[cursor:source_start])
+        output.append(safe_source)
+        cursor = source_end
+    return "".join(output)
+
+
+def _image_to_md(alt: str, source: str) -> str:
+    safe_source = quote(source, safe="/:?#[]@!$&'*+,;=%~._-")
+    return f"![{alt}]({safe_source})"
+
 
 # --- markdown -> fragment ---------------------------------------------------
 
 
 def md_to_fragment(md: str, frag: XmlFragment) -> None:
     """Populate an (empty) fragment from markdown (frontmatter stripped)."""
-    tokens = _md.parse(_FRONTMATTER_RE.sub("", md or "", count=1))
+    body = normalize_internal_image_markdown(_FRONTMATTER_RE.sub("", md or "", count=1))
+    tokens = _md.parse(body)
     _render_blocks(tokens, 0, len(tokens), frag)
     if len(frag.children) == 0:
         frag.children.append(XmlElement("paragraph"))
@@ -90,7 +155,11 @@ def _render_table(tokens: list[Token], i: int, parent) -> int:
             cell = row.children.append(XmlElement(cell_tag))
             paragraph = cell.children.append(XmlElement("paragraph"))
             inline = next(
-                (candidate for candidate in tokens[j + 1 : cell_close] if candidate.type == "inline"),
+                (
+                    candidate
+                    for candidate in tokens[j + 1 : cell_close]
+                    if candidate.type == "inline"
+                ),
                 None,
             )
             if inline is not None:
@@ -103,9 +172,7 @@ def _render_table(tokens: list[Token], i: int, parent) -> int:
 def _render_list(tokens: list[Token], i: int, parent) -> int:
     open_tok = tokens[i]
     ordered = open_tok.type == "ordered_list_open"
-    close = _find_close(
-        tokens, i, "ordered_list_close" if ordered else "bullet_list_close"
-    )
+    close = _find_close(tokens, i, "ordered_list_close" if ordered else "bullet_list_close")
     # peek first item to detect a task list
     is_task = _list_is_tasklist(tokens, i + 1, close)
     if is_task:
@@ -159,7 +226,7 @@ def _strip_task_prefix(tokens: list[Token], start: int, end: int) -> None:
                 if tok.content.startswith(prefix) and tok.children:
                     first = tok.children[0]
                     if first.type == "text" and first.content.startswith(prefix):
-                        first.content = first.content[len(prefix):]
+                        first.content = first.content[len(prefix) :]
                     return
             return
 
@@ -231,7 +298,23 @@ def _render_inline(inline_tok: Token, parent) -> None:
             parent.children.append(XmlElement("hardBreak"))
             text_node = None
         elif t == "html_inline":
-            emit(child.content)
+            span_match = _STYLE_SPAN_OPEN_RE.match(child.content.strip())
+            if span_match:
+                style = {
+                    key.lower(): value.lower()
+                    for key, value in _ALLOWED_STYLE_RE.findall(span_match.group(1))
+                }
+                attrs = {}
+                if color := style.get("color"):
+                    attrs["color"] = color
+                if background := style.get("background-color"):
+                    attrs["backgroundColor"] = background
+                if attrs:
+                    marks["textStyle"] = attrs
+            elif _STYLE_SPAN_CLOSE_RE.match(child.content.strip()):
+                marks.pop("textStyle", None)
+            else:
+                emit(child.content)
 
 
 # --- fragment -> markdown ---------------------------------------------------
@@ -266,7 +349,7 @@ def _block_to_md(node, indent: str) -> str | None:
         return indent + "---"
     if tag == "image":
         attrs = dict(node.attributes)
-        return f"{indent}![{attrs.get('alt', '')}]({attrs.get('src', '')})"
+        return indent + _image_to_md(attrs.get("alt", ""), attrs.get("src", ""))
     if tag in ("bulletList", "orderedList", "taskList"):
         return _list_to_md(node, indent)
     if tag == "table":
@@ -284,7 +367,11 @@ def _list_to_md(node, indent: str) -> str:
         if tag == "orderedList":
             bullet = f"{start + idx}. "
         elif tag == "taskList":
-            checked = str(dict(item.attributes).get("checked", "false")).lower() in ("true", "1", "1.0")
+            checked = str(dict(item.attributes).get("checked", "false")).lower() in (
+                "true",
+                "1",
+                "1.0",
+            )
             bullet = f"- [{'x' if checked else ' '}] "
         else:
             bullet = "- "
@@ -341,9 +428,13 @@ def _inline_children_to_md(node) -> str:
             out.append("  \n")
         elif getattr(child, "tag", None) == "image":
             attrs = dict(child.attributes)
-            out.append(f"![{attrs.get('alt', '')}]({attrs.get('src', '')})")
+            out.append(_image_to_md(attrs.get("alt", ""), attrs.get("src", "")))
         else:
-            out.append("".join(_text_to_md(c) for c in getattr(child, "children", []) if isinstance(c, XmlText)))
+            out.append(
+                "".join(
+                    _text_to_md(c) for c in getattr(child, "children", []) if isinstance(c, XmlText)
+                )
+            )
     return "".join(out)
 
 
@@ -364,5 +455,16 @@ def _text_to_md(text: XmlText) -> str:
         if "link" in marks and marks["link"] is not None:
             href = (marks["link"] or {}).get("href", "")
             piece = f"[{piece}]({href})"
+        if "textStyle" in marks and marks["textStyle"] is not None:
+            style = marks["textStyle"] or {}
+            declarations = []
+            if color := style.get("color"):
+                if re.fullmatch(r"#[0-9a-fA-F]{6}", str(color)):
+                    declarations.append(f"color: {str(color).lower()}")
+            if background := style.get("backgroundColor"):
+                if re.fullmatch(r"#[0-9a-fA-F]{6}", str(background)):
+                    declarations.append(f"background-color: {str(background).lower()}")
+            if declarations:
+                piece = f'<span style="{"; ".join(declarations)}">{piece}</span>'
         out.append(piece)
     return "".join(out)

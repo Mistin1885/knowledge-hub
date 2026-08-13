@@ -79,9 +79,7 @@ async def test_page_lifecycle_links_and_search(client, alice):
     versions = (await client.get(f"/api/v1/pages/{b['id']}/versions")).json()
     assert len(versions) == 2
     first = versions[-1]
-    restored = (
-        await client.post(f"/api/v1/pages/{b['id']}/versions/{first['id']}/restore")
-    ).json()
+    restored = (await client.post(f"/api/v1/pages/{b['id']}/versions/{first['id']}/restore")).json()
     assert "步驟一" in restored["content_md"]
 
     # delete keeps inbound links as unresolved backreferences
@@ -95,9 +93,7 @@ async def test_concurrent_title_autosaves_use_distinct_versions(client, alice, m
 
     ws = await make_workspace(client, "Concurrent autosave")
     page = (
-        await client.post(
-            f"/api/v1/workspaces/{ws['id']}/pages", json={"title": "Original"}
-        )
+        await client.post(f"/api/v1/workspaces/{ws['id']}/pages", json={"title": "Original"})
     ).json()
 
     original_index_page = pipeline.index_page
@@ -154,9 +150,7 @@ async def test_rbac_and_private_pages(client, alice):
             json={"title": "Secret", "visibility": "private", "content_md": "hidden"},
         )
     ).json()
-    public = (
-        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Public"})
-    ).json()
+    public = (await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Public"})).json()
 
     await register_and_login(client, "viewer@test.com", "Viewer")  # switches session
     # not a member yet: workspace hidden
@@ -206,20 +200,18 @@ async def test_rbac_and_private_pages(client, alice):
 async def test_comments_mentions_audit(client, alice):
     ws = await make_workspace(client)
     wid = ws["id"]
-    page = (
-        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Notes"})
-    ).json()
+    page = (await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Notes"})).json()
 
     await register_and_login(client, "bob@test.com", "Bob Wu")
     await client.post(
         "/api/v1/auth/login", json={"email": "alice@test.com", "password": "password123"}
     )
-    await client.post(f"/api/v1/workspaces/{wid}/members", json={"email": "bob@test.com", "role": "member"})
+    await client.post(
+        f"/api/v1/workspaces/{wid}/members", json={"email": "bob@test.com", "role": "member"}
+    )
 
     comment = (
-        await client.post(
-            f"/api/v1/pages/{page['id']}/comments", json={"body_md": "@bob 請看一下"}
-        )
+        await client.post(f"/api/v1/pages/{page['id']}/comments", json={"body_md": "@bob 請看一下"})
     ).json()
     assert [m["name"] for m in comment["mentions"]] == ["Bob Wu"]
 
@@ -351,9 +343,7 @@ async def test_member_directory_paginates_all_users_and_persists_last_login(clie
     assert added.status_code == 201
     directory_user = next(
         item
-        for item in (
-            await client.get(f"/api/v1/workspaces/{wid}/member-directory")
-        ).json()["items"]
+        for item in (await client.get(f"/api/v1/workspaces/{wid}/member-directory")).json()["items"]
         if item["email"] == "directory-user@test.com"
     )
     assert directory_user["role"] == "viewer" and directory_user["joined_at"] is not None
@@ -362,9 +352,7 @@ async def test_member_directory_paginates_all_users_and_persists_last_login(clie
         "/api/v1/auth/login",
         json={"email": "directory-user@test.com", "password": "password123"},
     )
-    assert (
-        await client.get(f"/api/v1/workspaces/{wid}/member-directory")
-    ).status_code == 403
+    assert (await client.get(f"/api/v1/workspaces/{wid}/member-directory")).status_code == 403
 
     await client.post(
         "/api/v1/auth/login", json={"email": "alice@test.com", "password": "password123"}
@@ -376,16 +364,12 @@ async def test_member_directory_paginates_all_users_and_persists_last_login(clie
     assert changed.status_code == 200
     directory_user = next(
         item
-        for item in (
-            await client.get(f"/api/v1/workspaces/{wid}/member-directory")
-        ).json()["items"]
+        for item in (await client.get(f"/api/v1/workspaces/{wid}/member-directory")).json()["items"]
         if item["email"] == "directory-user@test.com"
     )
     assert directory_user["role"] == "admin"
 
-    removed = await client.delete(
-        f"/api/v1/workspaces/{wid}/members/{directory_user['user_id']}"
-    )
+    removed = await client.delete(f"/api/v1/workspaces/{wid}/members/{directory_user['user_id']}")
     assert removed.status_code == 204
     all_entries = []
     for page in (1, 2):
@@ -430,17 +414,14 @@ async def test_graph_related_orphans(client, alice):
     limited_ids = {node["id"] for node in limited["nodes"]}
     assert len(limited_ids) == 2
     assert all(
-        edge["source"] in limited_ids and edge["target"] in limited_ids
-        for edge in limited["edges"]
+        edge["source"] in limited_ids and edge["target"] in limited_ids for edge in limited["edges"]
     )
     assert (await client.get(f"/api/v1/workspaces/{wid}/graph?limit=0")).status_code == 422
 
     other_ws = await make_workspace(client, "Other graph")
     other_wid = other_ws["id"]
     other_spoke = (
-        await client.post(
-            f"/api/v1/workspaces/{other_wid}/pages", json={"title": "Other Spoke"}
-        )
+        await client.post(f"/api/v1/workspaces/{other_wid}/pages", json={"title": "Other Spoke"})
     ).json()
     other_hub = (
         await client.post(
@@ -448,9 +429,7 @@ async def test_graph_related_orphans(client, alice):
             json={"title": "Other Hub", "content_md": "[[Other Spoke]]"},
         )
     ).json()
-    first_workspace_graph = (
-        await client.get(f"/api/v1/workspaces/{wid}/graph?limit=1000")
-    ).json()
+    first_workspace_graph = (await client.get(f"/api/v1/workspaces/{wid}/graph?limit=1000")).json()
     assert {other_hub["id"], other_spoke["id"]}.isdisjoint(
         {node["id"] for node in first_workspace_graph["nodes"]}
     )
@@ -544,7 +523,11 @@ async def test_folder_children_with_preview(client, alice):
 
 async def test_export_page_folder_and_workspace(client, alice):
     import io
+    import struct
     import zipfile
+    import zlib
+
+    from pypdf import PdfReader
 
     ws = await make_workspace(client)
     wid = ws["id"]
@@ -570,20 +553,83 @@ async def test_export_page_folder_and_workspace(client, alice):
     assert 'filename="Setup.md"' in resp.headers["content-disposition"]
     assert resp.text == "# Setup\nSteps."
 
+    # PDF export embeds every authenticated page image, including URLs whose
+    # filenames need Markdown escaping.
+    def solid_png(red: int, green: int, blue: int) -> bytes:
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
+
+        width, height = 24, 16
+        header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+        scanlines = b"".join(b"\0" + bytes((red, green, blue)) * width for _ in range(height))
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(scanlines))
+            + chunk(b"IEND", b"")
+        )
+
+    image_urls = []
+    uploads = (
+        ("pixel.png", solid_png(220, 38, 38)),
+        ("second image.png", solid_png(34, 197, 94)),
+        ("diagram (final).png", solid_png(37, 99, 235)),
+    )
+    for filename, png in uploads:
+        uploaded = await client.post(
+            f"/api/v1/pages/{page['id']}/attachments",
+            files={"file": (filename, png, "image/png")},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        image_urls.append(uploaded.json()["preview_url"])
+
+    image_markdown = "\n\n".join(
+        f"![Export image {index}]({url})" for index, url in enumerate(image_urls, start=1)
+    )
+    updated = await client.patch(
+        f"/api/v1/pages/{page['id']}",
+        json={
+            "content_md": f"# Setup\n\nSteps before images.\n\n{image_markdown}\n\nTail after images."
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    pdf = await client.get(f"/api/v1/pages/{page['id']}/export.pdf")
+    assert pdf.status_code == 200, pdf.text
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert 'filename="Setup.pdf"' in pdf.headers["content-disposition"]
+    assert pdf.content.startswith(b"%PDF-")
+    reader = PdfReader(io.BytesIO(pdf.content))
+    assert len(reader.pages) >= 1
+    extracted_text = "\n".join(pdf_page.extract_text() or "" for pdf_page in reader.pages)
+    assert "Setup" in extracted_text
+    assert "Tail after images." in extracted_text
+    assert all(f"Export image {index}" in extracted_text for index in range(1, 4))
+    assert sum(len(pdf_page.images) for pdf_page in reader.pages) == 3
+
     # folder -> zip of its subtree
     resp = await client.get(f"/api/v1/pages/{folder['id']}/export")
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/zip"
     zf = zipfile.ZipFile(io.BytesIO(resp.content))
-    assert "Setup.md" in zf.namelist()
-    assert zf.read("Setup.md").decode() == "# Setup\nSteps."
+    assert "Setup/Setup.md" in zf.namelist()
+    assert "Setup/pixel.png" in zf.namelist()
+    assert "Setup/second image.png" in zf.namelist()
+    assert "Setup/diagram (final).png" in zf.namelist()
+    exported_page = zf.read("Setup/Setup.md").decode()
+    assert "![Export image 1](<pixel.png>)" in exported_page
+    assert "![Export image 2](<second image.png>)" in exported_page
+    assert "![Export image 3](<diagram (final).png>)" in exported_page
 
     # workspace -> zip preserving folder structure
     resp = await client.get(f"/api/v1/workspaces/{wid}/export")
     assert resp.status_code == 200
     zf = zipfile.ZipFile(io.BytesIO(resp.content))
     names = zf.namelist()
-    assert "Guides/Setup.md" in names
+    assert "Guides/Setup/Setup.md" in names
+    assert "Guides/Setup/pixel.png" in names
+    assert "Guides/Setup/second image.png" in names
+    assert "Guides/Setup/diagram (final).png" in names
     assert "Root note.md" in names
 
 
@@ -591,13 +637,9 @@ async def test_move_page_between_levels(client, alice):
     ws = await make_workspace(client)
     wid = ws["id"]
     folder = (
-        await client.post(
-            f"/api/v1/workspaces/{wid}/pages", json={"title": "F", "is_folder": True}
-        )
+        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "F", "is_folder": True})
     ).json()
-    page = (
-        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "P"})
-    ).json()
+    page = (await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "P"})).json()
 
     # root -> folder
     resp = await client.patch(f"/api/v1/pages/{page['id']}", json={"parent_id": folder["id"]})
@@ -616,9 +658,7 @@ async def test_move_page_between_levels(client, alice):
 async def test_attachment_upload_roundtrip(client, alice):
     ws = await make_workspace(client)
     wid = ws["id"]
-    page = (
-        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Pics"})
-    ).json()
+    page = (await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "Pics"})).json()
 
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
     resp = await client.post(
@@ -689,6 +729,46 @@ async def test_vault_file_nodes_preview_download_move_and_alias(client, alice):
         f"/api/v1/workspaces/{wid}/resolve", params={"title": "Product/spec.pdf"}
     )
     assert new_path.json()["id"] == node["id"]
+
+
+async def test_folder_counts_images_only_when_direct_children(client, alice):
+    import base64
+
+    ws = await make_workspace(client, "Counts")
+    wid = ws["id"]
+    folder = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages",
+            json={"title": "Folder", "is_folder": True},
+        )
+    ).json()
+    page = (
+        await client.post(
+            f"/api/v1/workspaces/{wid}/pages",
+            json={"title": "Page", "parent_id": folder["id"]},
+        )
+    ).json()
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    under_page = await client.post(
+        f"/api/v1/workspaces/{wid}/files?parent_id={page['id']}",
+        files={"file": ("page-image.png", png, "image/png")},
+    )
+    direct = await client.post(
+        f"/api/v1/workspaces/{wid}/files?parent_id={folder['id']}",
+        files={"file": ("folder-image.png", png, "image/png")},
+    )
+    assert under_page.status_code == 201, under_page.text
+    assert direct.status_code == 201, direct.text
+
+    tree = (await client.get(f"/api/v1/workspaces/{wid}/tree")).json()
+    tree_folder = next(item for item in tree if item["id"] == folder["id"])
+    assert tree_folder["file_count"] == 2  # Page + the image directly under Folder
+
+    pages = (await client.get(f"/api/v1/workspaces/{wid}/pages")).json()
+    flat_folder = next(item for item in pages if item["id"] == folder["id"])
+    assert flat_folder["file_count"] == 2
 
 
 async def test_idempotent_obsidian_import_counts_images_and_persisted_order(client, alice):
@@ -782,9 +862,7 @@ async def test_idempotent_obsidian_import_counts_images_and_persisted_order(clie
     assert "tags" not in tree_vault and "metadata" not in tree_vault and "owner" not in tree_vault
 
     vault_children = (
-        await client.get(
-            f"/api/v1/workspaces/{wid}/tree", params={"parent_id": tree_vault["id"]}
-        )
+        await client.get(f"/api/v1/workspaces/{wid}/tree", params={"parent_id": tree_vault["id"]})
     ).json()
     assert {node["title"] for node in vault_children} == {"assets", "notes"}
     assert {node["title"]: node["file_count"] for node in vault_children} == {
@@ -812,10 +890,7 @@ async def test_idempotent_obsidian_import_counts_images_and_persisted_order(clie
     assert "![pic](<../assets/pic.png>)" in exported_note
     assert "![[missing-image.png]]" in exported_note
     assert '![legacy](../missing/legacy.png "caption")' in exported_note
-    assert (
-        "![orphan](/api/v1/files/22222222-2222-2222-2222-222222222222/preview)"
-        in exported_note
-    )
+    assert "![orphan](/api/v1/files/22222222-2222-2222-2222-222222222222/preview)" in exported_note
     assert "| Name | Value |\n| --- | --- |\n| first | second |" in exported_note
     assert zf.read("Team Vault/assets/pic.png") == png_v2
 
@@ -921,9 +996,7 @@ async def test_oversized_token_sanitized_from_preview(client, alice):
     ws = await make_workspace(client)
     wid = ws["id"]
     folder = (
-        await client.post(
-            f"/api/v1/workspaces/{wid}/pages", json={"title": "F", "is_folder": True}
-        )
+        await client.post(f"/api/v1/workspaces/{wid}/pages", json={"title": "F", "is_folder": True})
     ).json()
 
     blob = "Zm9vYmFy" * 50  # 400-char whitespace-free run (e.g. pasted base64)

@@ -21,12 +21,18 @@ import type { Page, User, Workspace } from '../../api/types';
 import { pageApi } from '../../api/endpoints';
 import { useCreatePage } from '../../hooks/mutations';
 import { colorForUser } from '../../lib/color';
+import {
+  COLLAB_RECONNECT_MAX_MS,
+  COLLAB_STABLE_CONNECTION_MS,
+  collabReconnectDelayMs,
+} from '../../lib/collabReconnect';
 import { vaultPath } from '../../lib/tree';
 import { Wikilinks, type WikilinkAutocompleteState } from './wikilinks';
 import WikilinkSuggest from './WikilinkSuggest';
 import CreateLinkPopover from './CreateLinkPopover';
 import SelectionMenu from './SelectionMenu';
 import BlockDragHandle from './BlockDragHandle';
+import { ColoredTextStyle, CopyableCodeBlock } from './editorExtensions';
 
 interface ImageInsertResult {
   uploaded: number;
@@ -137,20 +143,116 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
   const [{ ydoc, provider }] = useState(() => {
     const doc = new Y.Doc();
     const wsBase = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/collab`;
-    return { ydoc: doc, provider: new WebsocketProvider(wsBase, pageId, doc) };
+    return {
+      ydoc: doc,
+      provider: new WebsocketProvider(wsBase, pageId, doc, {
+        // This remains a fallback for handshake failures. Short-lived
+        // successful connections are handled by the stability-aware policy
+        // below because y-websocket resets its own counter on every HTTP 101.
+        maxBackoffTime: COLLAB_RECONNECT_MAX_MS,
+      }),
+    };
   });
 
   useEffect(() => {
-    const onStatus = ({ status: next }: { status: CollabStatus }) => setStatus(next);
-    const onClose = (event: CloseEvent | null) => {
-      if (!event) return;
-      if (event.code === 4401) {
-        provider.disconnect();
-        navigate('/login');
-      } else if (event.code === 4403) {
-        provider.disconnect();
-        setForbidden(true);
+    let stopped = false;
+    let connectedAt: number | null = null;
+    let consecutiveFailures = 0;
+    let reconnectPending = false;
+    let reconnectTimer: number | null = null;
+    let stableTimer: number | null = null;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    };
+    const clearStableTimer = () => {
+      if (stableTimer !== null) window.clearTimeout(stableTimer);
+      stableTimer = null;
+    };
+    const scheduleReconnect = (): number | null => {
+      if (stopped || !reconnectPending || reconnectTimer !== null || !navigator.onLine) {
+        return null;
       }
+      const delayMs = collabReconnectDelayMs(Math.max(1, consecutiveFailures));
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        if (stopped || !reconnectPending) return;
+        if (!navigator.onLine) return; // the online event will schedule another attempt
+        reconnectPending = false;
+        provider.connect();
+      }, delayMs);
+      return delayMs;
+    };
+
+    const onStatus = ({ status: next }: { status: CollabStatus }) => {
+      if (next === 'connected') {
+        connectedAt = performance.now();
+        reconnectPending = false;
+        clearReconnectTimer();
+        clearStableTimer();
+        stableTimer = window.setTimeout(() => {
+          // A 101 alone is not success. Only a connection that survives the
+          // y-websocket receive-watchdog window resets the failure history.
+          consecutiveFailures = 0;
+          stableTimer = null;
+        }, COLLAB_STABLE_CONNECTION_MS);
+      }
+      setStatus(next);
+    };
+    const onClose = (event: CloseEvent | null) => {
+      const lifetimeMs = connectedAt === null ? null : Math.round(performance.now() - connectedAt);
+      connectedAt = null;
+      clearStableTimer();
+
+      if (event?.code === 4401) {
+        provider.shouldConnect = false;
+        reconnectPending = false;
+        clearReconnectTimer();
+        queueMicrotask(() => provider.disconnect());
+        navigate('/login');
+        return;
+      }
+      if (event?.code === 4403) {
+        provider.shouldConnect = false;
+        reconnectPending = false;
+        clearReconnectTimer();
+        queueMicrotask(() => provider.disconnect());
+        setForbidden(true);
+        return;
+      }
+
+      if (lifetimeMs === null || lifetimeMs < COLLAB_STABLE_CONNECTION_MS) {
+        consecutiveFailures += 1;
+      } else {
+        consecutiveFailures = 1;
+      }
+
+      // Stop y-websocket's built-in retry before it is scheduled by its close
+      // handler. It resets its failure counter on every successful 101, which
+      // otherwise causes a tight loop when a proxy closes the socket seconds
+      // after opening it.
+      provider.shouldConnect = false;
+      reconnectPending = true;
+      const reconnectDelayMs = scheduleReconnect();
+      console.warn('[collab] websocket closed', {
+        pageId,
+        code: event?.code ?? null,
+        reason: event?.reason || null,
+        wasClean: event?.wasClean ?? null,
+        lifetimeMs,
+        consecutiveFailures,
+        reconnectDelayMs,
+      });
+    };
+    const onOnline = () => {
+      if (!reconnectPending) return;
+      const reconnectDelayMs = scheduleReconnect();
+      console.info('[collab] network online; reconnect scheduled', {
+        pageId,
+        consecutiveFailures,
+        reconnectDelayMs,
+      });
     };
     const awareness = provider.awareness;
     const onAwareness = () => {
@@ -166,12 +268,17 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
     provider.on('status', onStatus);
     provider.on('connection-close', onClose);
     awareness.on('change', onAwareness);
+    window.addEventListener('online', onOnline);
     onAwareness();
 
     return () => {
+      stopped = true;
+      clearReconnectTimer();
+      clearStableTimer();
       provider.off('status', onStatus);
       provider.off('connection-close', onClose);
       awareness.off('change', onAwareness);
+      window.removeEventListener('online', onOnline);
       provider.destroy();
       ydoc.destroy();
     };
@@ -247,9 +354,15 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
     extensions: [
       StarterKit.configure({
         history: false,
+        codeBlock: false,
         dropcursor: { color: 'rgb(99 102 241)', width: 2 },
       }),
-      Link.configure({ openOnClick: false }),
+      CopyableCodeBlock,
+      ColoredTextStyle,
+      Link.configure({
+        openOnClick: true,
+        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+      }),
       Image.configure({ inline: true }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -314,6 +427,10 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
       <div
         className="km-editor relative"
         onContextMenu={(e) => {
+          if (e.target instanceof Element && e.target.closest('img')) {
+            setContextMenu(null);
+            return;
+          }
           // Custom formatting menu only when text is selected; otherwise keep
           // the native menu (spellcheck, paste, …).
           if (!editor || !editable || editor.state.selection.empty) return;

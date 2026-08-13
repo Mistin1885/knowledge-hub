@@ -24,7 +24,9 @@ class TestParser:
         assert meta == {} and tags == [] and body == "# Just content"
 
     def test_wikilinks(self):
-        links = parser.extract_links("See [[Page One]] and [[Page Two|alias]] and [[Page Three#sec]].")
+        links = parser.extract_links(
+            "See [[Page One]] and [[Page Two|alias]] and [[Page Three#sec]]."
+        )
         titles = {link.target_title for link in links}
         assert titles == {"Page One", "Page Two", "Page Three"}
         assert all(link.kind == LinkKind.WIKI for link in links)
@@ -52,7 +54,9 @@ class TestParser:
 
 class TestChunking:
     def test_split_by_heading(self):
-        chunks = chunk_markdown("intro text here padded out to minimum length ok\n\n## A\nbody a\n\n## B\nbody b", "T")
+        chunks = chunk_markdown(
+            "intro text here padded out to minimum length ok\n\n## A\nbody a\n\n## B\nbody b", "T"
+        )
         headings = [c.heading for c in chunks]
         assert None in headings and "A" in headings and "B" in headings
 
@@ -86,6 +90,20 @@ class TestYMarkdown:
         out = self.roundtrip("這是 **粗體** 和後面")
         assert out.strip() == "這是 **粗體** 和後面"
 
+    def test_text_and_background_colors_roundtrip(self):
+        md = '<span style="color: #337ea9; background-color: #cb912f">有顏色的文字</span>'
+        once = self.roundtrip(md)
+        twice = self.roundtrip(once)
+        assert once == twice
+        assert "color: #337ea9" in once
+        assert "background-color: #cb912f" in once
+
+    def test_text_style_rejects_unapproved_inline_styles(self):
+        out = self.roundtrip('<span style="font-size: 99px; color: red">文字</span>')
+        assert "font-size" not in out
+        assert "color: red" not in out
+        assert out.strip() == "文字"
+
     def test_empty(self):
         assert self.roundtrip("") == ""
 
@@ -106,6 +124,20 @@ class TestYMarkdown:
         assert "![resolved](/api/v1/files/11111111-1111-1111-1111-111111111111/preview)" in once
         assert "![[unresolved image.png]]" in once
 
+    def test_internal_images_with_spaces_and_parentheses_remain_images(self):
+        md = (
+            "![one](/api/v1/attachments/11111111-1111-1111-1111-111111111111/one.png)\n\n"
+            "![two](/api/v1/attachments/22222222-2222-2222-2222-222222222222/two image.png)\n\n"
+            "![three](/api/v1/attachments/33333333-3333-3333-3333-333333333333/diagram (final).png)"
+        )
+        once = self.roundtrip(md)
+        twice = self.roundtrip(once)
+
+        assert once == twice
+        assert once.count("![") == 3
+        assert "two%20image.png" in once
+        assert "diagram%20%28final%29.png" in once
+
 
 class TestProtocol:
     def test_varuint(self):
@@ -121,6 +153,42 @@ class TestProtocol:
         ]
         decoded = protocol.decode_awareness_update(protocol.encode_awareness_update(entries))
         assert decoded == entries
+
+    async def test_awareness_is_echoed_to_sender_as_heartbeat(self):
+        import uuid
+
+        from pycrdt import Doc, XmlFragment
+
+        from app.modules.collab.services.rooms import Connection, Room, RoomManager
+
+        class FakeWebSocket:
+            def __init__(self):
+                self.sent: list[bytes] = []
+
+            async def send_bytes(self, message: bytes):
+                self.sent.append(message)
+
+        ws = FakeWebSocket()
+        doc = Doc()
+        room = Room(
+            page_id=uuid.uuid4(),
+            doc=doc,
+            frag=doc.get("default", type=XmlFragment),
+        )
+        room.connections[ws] = Connection(
+            ws=ws,
+            user_id=uuid.uuid4(),
+            can_edit=True,
+            display={"name": "Alice", "color": "#000000"},
+        )
+        entry = protocol.AwarenessEntry(123, 1, '{"user": {"name": "Alice"}}')
+        payload = protocol.encode_awareness_update([entry])
+        message = protocol.encode_awareness(payload)
+
+        await RoomManager().handle_message(room, ws, message)
+
+        assert ws.sent == [message]
+        assert room.awareness[123] == entry
 
 
 class TestSanitize:

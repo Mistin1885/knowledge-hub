@@ -23,7 +23,7 @@ from app.api.schemas.pages import (
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import export as export_service
 from app.modules.pages.services import pages as pages_service
-from app.modules.pages.services import vault
+from app.modules.pages.services import pdf_export, vault
 from app.modules.workspaces.services import policy
 from app.orchestration import index_page as pipeline
 from app.shared.constants import NodeType, Permission
@@ -34,7 +34,9 @@ router = APIRouter(tags=["pages"])
 @router.get("/workspaces/{workspace_id}/pages", response_model=list[PageOut])
 async def list_pages(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
     pages = await pages_service.list_workspace(s, user, workspace_id)
-    counts = pages_repo.folder_file_counts(pages)
+    assets = await pages_repo.file_assets_for_nodes(s, [page.id for page in pages])
+    image_node_ids = {asset.node_id for asset in assets if asset.content_type.startswith("image/")}
+    counts = pages_repo.folder_file_counts(pages, image_node_ids=image_node_ids)
     return await serializers.pages_out(s, pages, file_counts=counts)
 
 
@@ -107,10 +109,17 @@ async def page_ancestors(page_id: uuid.UUID, user: CurrentUser, s: DB):
 )
 async def create_page(workspace_id: uuid.UUID, body: PageCreateIn, user: CurrentUser, s: DB):
     page = await pipeline.create_page(
-        s, user, workspace_id,
-        title=body.title, parent_id=body.parent_id, content_md=body.content_md,
-        is_folder=body.is_folder, status=body.status, visibility=body.visibility,
-        tags=body.tags, metadata=body.metadata,
+        s,
+        user,
+        workspace_id,
+        title=body.title,
+        parent_id=body.parent_id,
+        content_md=body.content_md,
+        is_folder=body.is_folder,
+        status=body.status,
+        visibility=body.visibility,
+        tags=body.tags,
+        metadata=body.metadata,
     )
     return await serializers.page_detail_out(s, page)
 
@@ -174,6 +183,22 @@ async def export_page(page_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
     return Response(
         content=body,
         media_type=media_type,
+        headers={"Content-Disposition": export_service.content_disposition(filename)},
+    )
+
+
+@router.get("/pages/{page_id}/export.pdf")
+async def export_page_pdf(page_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
+    """Download a regular page as a self-contained PDF with embedded images."""
+    page = await pages_service.get_for_read(s, user, page_id)
+    if page.node_type != NodeType.MARKDOWN or page.is_folder:
+        from app.shared.exceptions import ValidationFailedError
+
+        raise ValidationFailedError("Only regular pages can be exported as PDF")
+    filename, data = await pdf_export.export_page_pdf(s, user, page_id)
+    return Response(
+        content=data,
+        media_type="application/pdf",
         headers={"Content-Disposition": export_service.content_disposition(filename)},
     )
 
