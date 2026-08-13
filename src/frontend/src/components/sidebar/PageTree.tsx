@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
-import type { VaultTreeNode, Workspace } from '../../api/types';
+import type { RuntimeConfig, VaultTreeNode, Workspace } from '../../api/types';
 import { usePageAncestors, useVaultTree } from '../../hooks/queries';
 import { useCreatePage, useDeletePage, useUpdatePage, useUploadFiles } from '../../hooks/mutations';
 import { pageApi } from '../../api/endpoints';
@@ -17,7 +17,13 @@ function cnRootDrop(active: boolean): string {
     : 'h-4';
 }
 
-export default function PageTree({ workspace }: { workspace: Workspace }) {
+export default function PageTree({
+  workspace,
+  config,
+}: {
+  workspace: Workspace;
+  config: RuntimeConfig | undefined;
+}) {
   const match = useMatch('/w/:slug/p/:pageId');
   const currentPageId = match?.params.pageId ?? null;
   const rootsQ = useVaultTree(workspace.id, null);
@@ -151,6 +157,7 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
   };
 
   const canEdit = workspace.my_role !== 'viewer';
+  const uploadsEnabled = config?.file_uploads_enabled ?? false;
 
   if (rootsQ.isLoading) {
     return (
@@ -173,7 +180,7 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
         // the page to the top level; folder rows handle their own drop.
         if (!canEdit) return;
         if ((e.target as HTMLElement).closest('[data-tree-row]')) return;
-        const hasFiles = e.dataTransfer.types.includes('Files');
+        const hasFiles = uploadsEnabled && e.dataTransfer.types.includes('Files');
         if (!hasFiles && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = hasFiles ? 'copy' : 'move';
@@ -185,7 +192,7 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
       onDrop={(e) => {
         if (!canEdit) return;
         if ((e.target as HTMLElement).closest('[data-tree-row]')) return;
-        const files = Array.from(e.dataTransfer.files ?? []);
+        const files = uploadsEnabled ? Array.from(e.dataTransfer.files ?? []) : [];
         if (files.length === 0 && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
         e.preventDefault();
         setRootDragOver(false);
@@ -213,6 +220,8 @@ export default function PageTree({ workspace }: { workspace: Workspace }) {
           onToggleExpand={toggleExpand}
           actions={actions}
           canEdit={canEdit}
+          uploadsEnabled={uploadsEnabled}
+          downloadsEnabled={config?.file_downloads_enabled ?? false}
         />
       ))}
       <div

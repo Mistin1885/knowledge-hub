@@ -3,7 +3,12 @@
 from pycrdt import Doc, XmlFragment
 
 from app.modules.collab.domain import protocol
-from app.modules.collab.domain.y_markdown import fragment_to_md, md_to_fragment
+from app.modules.collab.domain.y_markdown import (
+    fragment_to_md,
+    markdown_to_tiptap_json,
+    md_to_fragment,
+    tiptap_json_to_markdown,
+)
 from app.modules.links.domain import parser
 from app.modules.search.domain.chunking import chunk_markdown
 from app.modules.search.domain.sanitize import MAX_TOKEN_CHARS, sanitize_for_search
@@ -106,6 +111,27 @@ class TestYMarkdown:
 
     def test_empty(self):
         assert self.roundtrip("") == ""
+
+    def test_tiptap_json_uses_same_markdown_schema(self):
+        markdown = (
+            "# Design\n\nA **bold** [link](https://example.com).\n\n"
+            "- [x] shipped\n\n| A | B |\n| --- | --- |\n| one | two |\n"
+        )
+        document = markdown_to_tiptap_json(markdown)
+
+        assert document["type"] == "doc"
+        assert document["content"][0] == {
+            "type": "heading",
+            "attrs": {"level": 1},
+            "content": [{"type": "text", "text": "Design"}],
+        }
+        assert tiptap_json_to_markdown(document) == self.roundtrip(markdown)
+
+    def test_tiptap_json_rejects_invalid_document(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="TipTap doc"):
+            tiptap_json_to_markdown({"type": "paragraph"})
 
     def test_table_and_images_roundtrip_without_losing_content(self):
         md = (

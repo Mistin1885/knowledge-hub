@@ -6,6 +6,7 @@ import { workspaceApi } from '../../api/endpoints';
 import { downloadFile } from '../../lib/utils';
 import { Dropdown, MenuItem } from '../ui/Dropdown';
 import CreateWorkspaceDialog from '../workspace/CreateWorkspaceDialog';
+import { useRuntimeConfig } from '../../hooks/queries';
 
 export default function WorkspaceSwitcher({
   workspace,
@@ -16,6 +17,7 @@ export default function WorkspaceSwitcher({
 }) {
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
+  const configQ = useRuntimeConfig();
 
   return (
     <>
@@ -48,14 +50,16 @@ export default function WorkspaceSwitcher({
               </button>
             ))}
             <div className="my-1 border-t border-neutral-100" />
-            <MenuItem
-              icon={<Download size={14} />}
-              label="Export workspace (.zip)"
-              onClick={() => {
-                close();
-                downloadFile(workspaceApi.exportUrl(workspace.id));
-              }}
-            />
+            {configQ.data?.file_downloads_enabled && (
+              <MenuItem
+                icon={<Download size={14} />}
+                label="Export workspace (.zip)"
+                onClick={() => {
+                  close();
+                  downloadFile(workspaceApi.exportUrl(workspace.id));
+                }}
+              />
+            )}
             <MenuItem
               icon={<Plus size={14} />}
               label="New workspace"

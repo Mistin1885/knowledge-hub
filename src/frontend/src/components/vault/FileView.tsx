@@ -1,6 +1,7 @@
 import { Download, File, FileArchive, FileCode2, FileImage, FileText } from 'lucide-react';
 import type { PageDetail } from '../../api/types';
 import { downloadFile, formatBytes, formatDateTime } from '../../lib/utils';
+import { useRuntimeConfig } from '../../hooks/queries';
 
 function FileGlyph({ page, size = 26 }: { page: PageDetail; size?: number }) {
   if (page.preview_kind === 'image') return <FileImage size={size} />;
@@ -15,6 +16,7 @@ function FileGlyph({ page, size = 26 }: { page: PageDetail; size?: number }) {
 }
 
 export default function FileView({ page }: { page: PageDetail }) {
+  const configQ = useRuntimeConfig();
   const download = () => page.download_url && downloadFile(page.download_url);
 
   return (
@@ -53,13 +55,15 @@ export default function FileView({ page }: { page: PageDetail }) {
           <dt className="text-neutral-400">Uploaded</dt>
           <dd className="text-neutral-700">{formatDateTime(page.created_at)}</dd>
         </dl>
-        <button
-          onClick={download}
-          disabled={!page.download_url}
-          className="inline-flex flex-none items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition-colors duration-150 hover:bg-indigo-700 disabled:opacity-50"
-        >
-          <Download size={14} /> Download
-        </button>
+        {configQ.data?.file_downloads_enabled && (
+          <button
+            onClick={download}
+            disabled={!page.download_url}
+            className="inline-flex flex-none items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition-colors duration-150 hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <Download size={14} /> Download
+          </button>
+        )}
       </div>
     </div>
   );

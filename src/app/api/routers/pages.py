@@ -1,13 +1,14 @@
 import uuid
 
 from fastapi import APIRouter, Response, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.api import serializers
 from app.api.deps import DB, CurrentUser
 from app.api.schemas.pages import (
     ChildPageOut,
     MetadataKeyOut,
+    PageContentSaveIn,
     PageCreateIn,
     PageDetailOut,
     PageMoveIn,
@@ -20,13 +21,17 @@ from app.api.schemas.pages import (
     VersionDetailOut,
     VersionOut,
 )
+from app.modules.collab.domain import y_markdown
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import export as export_service
 from app.modules.pages.services import pages as pages_service
 from app.modules.pages.services import pdf_export, vault
 from app.modules.workspaces.services import policy
 from app.orchestration import index_page as pipeline
+from app.shared.config.settings import settings
 from app.shared.constants import NodeType, Permission
+from app.shared.exceptions import ValidationFailedError
+from app.shared.features import require_file_downloads
 
 router = APIRouter(tags=["pages"])
 
@@ -149,6 +154,43 @@ async def update_page(page_id: uuid.UUID, body: PageUpdateIn, user: CurrentUser,
     return await serializers.page_detail_out(s, page)
 
 
+@router.put(
+    "/pages/{page_id}/content",
+    response_model=PageDetailOut,
+    responses={409: {"description": "The page changed after this editing session started"}},
+)
+async def save_page_content(page_id: uuid.UUID, body: PageContentSaveIn, user: CurrentUser, s: DB):
+    """Save one standard-mode editing session with optimistic concurrency."""
+    if settings.editor_mode != "standard":
+        raise ValidationFailedError("Standard page saving is disabled in collaborative mode")
+    if (body.editor_doc is None) == (body.content_md is None):
+        raise ValidationFailedError("Provide exactly one of editor_doc or content_md")
+    try:
+        proposed = (
+            y_markdown.tiptap_json_to_markdown(body.editor_doc)
+            if body.editor_doc is not None
+            else body.content_md or ""
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValidationFailedError(str(exc)) from exc
+
+    current = await pages_service.get_for_edit(s, user, page_id, for_update=True)
+    current_revision = y_markdown.content_revision(current.content_md)
+    if body.base_revision != current_revision and proposed != current.content_md:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This page was changed by someone else while you were editing.",
+                "current_content_md": current.content_md,
+                "current_revision": current_revision,
+                "current_editor_doc": y_markdown.markdown_to_tiptap_json(current.content_md),
+                "proposed_content_md": proposed,
+            },
+        )
+    page = await pipeline.update_page(s, user, page_id, {"content_md": proposed})
+    return await serializers.page_detail_out(s, page)
+
+
 @router.patch("/pages/{page_id}/move", response_model=PageDetailOut)
 async def move_page(page_id: uuid.UUID, body: PageMoveIn, user: CurrentUser, s: DB):
     page = await pipeline.move_page(s, user, page_id, body.parent_id, body.before_id)
@@ -163,6 +205,7 @@ async def delete_page(page_id: uuid.UUID, user: CurrentUser, s: DB):
 @router.get("/pages/{page_id}/export")
 async def export_page(page_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
     """Folder pages download as a zip of their subtree; regular pages as one .md file."""
+    require_file_downloads()
     page = await pages_service.get_for_read(s, user, page_id)
     if page.node_type == NodeType.FILE:
         node, asset, path, _preview_kind = await vault.get_file(s, user, page.id)
@@ -190,6 +233,7 @@ async def export_page(page_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
 @router.get("/pages/{page_id}/export.pdf")
 async def export_page_pdf(page_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
     """Download a regular page as a self-contained PDF with embedded images."""
+    require_file_downloads()
     page = await pages_service.get_for_read(s, user, page_id)
     if page.node_type != NodeType.MARKDOWN or page.is_folder:
         from app.shared.exceptions import ValidationFailedError

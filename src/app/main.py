@@ -10,6 +10,7 @@ from app.api.routers import (
     auth,
     collab,
     comments,
+    config,
     files,
     links,
     pages,
@@ -57,6 +58,7 @@ async def app_error_handler(request: Request, exc: AppError):
 
 API_PREFIX = "/api/v1"
 for router in (
+    config.router,
     auth.router,
     workspaces.router,
     pages.router,
@@ -68,9 +70,10 @@ for router in (
 ):
     app.include_router(router, prefix=API_PREFIX)
 
-app.include_router(collab.router, prefix=API_PREFIX)
-# WebSocket lives outside /api/v1 per contract (WS /collab/{page_id})
-app.include_router(collab.ws_router)
+if settings.editor_mode == "collaborative":
+    app.include_router(collab.router, prefix=API_PREFIX)
+    # WebSocket lives outside /api/v1 per contract (WS /collab/{page_id})
+    app.include_router(collab.ws_router)
 
 
 @app.get("/healthz")

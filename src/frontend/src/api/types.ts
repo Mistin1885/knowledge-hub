@@ -116,6 +116,8 @@ export interface VaultTreeNode {
 
 export interface PageDetail extends Page {
   content_md: string;
+  content_revision: string;
+  editor_doc: Record<string, unknown>;
   backlink_count: number;
   outgoing_count: number;
 }
@@ -250,11 +252,26 @@ export interface Attachment {
   created_at: string;
   preview_kind: 'image' | 'pdf' | null;
   preview_url: string | null;
-  download_url: string;
+  download_url: string | null;
 }
 
 export interface PageShare {
   user_id: string;
   name?: string;
   email?: string;
+}
+
+export interface RuntimeConfig {
+  editor_mode: 'collaborative' | 'standard';
+  file_uploads_enabled: boolean;
+  file_downloads_enabled: boolean;
+  file_previews_enabled: boolean;
+}
+
+export interface ContentConflict {
+  detail: string;
+  current_content_md: string;
+  current_revision: string;
+  current_editor_doc: Record<string, unknown>;
+  proposed_content_md: string;
 }

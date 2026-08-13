@@ -55,6 +55,8 @@ export default function PageTreeNode({
   onToggleExpand,
   actions,
   canEdit,
+  uploadsEnabled,
+  downloadsEnabled,
 }: {
   node: VaultTreeNode;
   workspaceId: string;
@@ -65,6 +67,8 @@ export default function PageTreeNode({
   onToggleExpand: (id: string) => void;
   actions: TreeActions;
   canEdit: boolean;
+  uploadsEnabled: boolean;
+  downloadsEnabled: boolean;
 }) {
   const page = node;
   const isExpanded = expanded.has(page.id);
@@ -89,7 +93,7 @@ export default function PageTreeNode({
         onDragOver={
           canEdit
             ? (e) => {
-                const hasFiles = e.dataTransfer.types.includes('Files');
+                const hasFiles = uploadsEnabled && e.dataTransfer.types.includes('Files');
                 if (!hasFiles && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
                 if (hasFiles && !canContain) return;
                 e.preventDefault();
@@ -116,7 +120,7 @@ export default function PageTreeNode({
         onDrop={
           canEdit
             ? (e) => {
-                const files = Array.from(e.dataTransfer.files ?? []);
+                const files = uploadsEnabled ? Array.from(e.dataTransfer.files ?? []) : [];
                 if (files.length === 0 && !e.dataTransfer.types.includes(PAGE_DND_TYPE)) return;
                 if (files.length > 0 && !canContain) return;
                 e.preventDefault();
@@ -199,7 +203,7 @@ export default function PageTreeNode({
                     />
                   )}
                   {/* Subfolders only make sense inside a folder — convert the page first. */}
-                  {(page.node_type === 'folder' || page.is_folder) && (
+                  {uploadsEnabled && (page.node_type === 'folder' || page.is_folder) && (
                     <MenuItem
                       icon={<FolderPlus size={13} />}
                       label="New subfolder"
@@ -229,7 +233,7 @@ export default function PageTreeNode({
                       />
                     </>
                   )}
-                  {canContain && (
+                  {uploadsEnabled && canContain && (
                     <MenuItem
                       icon={<FileUp size={13} />}
                       label="Upload files…"
@@ -247,7 +251,7 @@ export default function PageTreeNode({
                       actions.onRename(page);
                     }}
                   />
-                  {page.node_type !== 'file' && !page.is_folder && (
+                  {downloadsEnabled && page.node_type !== 'file' && !page.is_folder && (
                     <MenuItem
                       icon={<FileDown size={13} />}
                       label="Export as .pdf"
@@ -267,20 +271,22 @@ export default function PageTreeNode({
                       }}
                     />
                   )}
-                  <MenuItem
-                    icon={<Download size={13} />}
-                    label={
-                      page.node_type === 'file'
-                        ? 'Download'
-                        : page.is_folder
-                          ? 'Export as .zip'
-                          : 'Export as .md'
-                    }
-                    onClick={() => {
-                      close();
-                      downloadFile(pageApi.exportUrl(page.id));
-                    }}
-                  />
+                  {downloadsEnabled && (
+                    <MenuItem
+                      icon={<Download size={13} />}
+                      label={
+                        page.node_type === 'file'
+                          ? 'Download'
+                          : page.is_folder
+                            ? 'Export as .zip'
+                            : 'Export as .md'
+                      }
+                      onClick={() => {
+                        close();
+                        downloadFile(pageApi.exportUrl(page.id));
+                      }}
+                    />
+                  )}
                   <MenuItem
                     icon={<Trash2 size={13} />}
                     label="Delete…"
@@ -317,6 +323,8 @@ export default function PageTreeNode({
             onToggleExpand={onToggleExpand}
             actions={actions}
             canEdit={canEdit}
+            uploadsEnabled={uploadsEnabled}
+            downloadsEnabled={downloadsEnabled}
           />
         ))}
     </div>

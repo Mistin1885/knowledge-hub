@@ -103,6 +103,32 @@ uv run km collab show-md <page-id>  # 檢視協作 doc 目前的 markdown（除�
 
 ## 設定
 
+### 編輯與檔案傳輸模式
+
+部署時可透過環境變數切換編輯模式，不需要建立另一套資料庫：
+
+```env
+# 即時多人協作（使用 WebSocket）
+KM_EDITOR_MODE=collaborative
+
+# 或標準模式（只使用 HTTPS，手動儲存與衝突排除）
+KM_EDITOR_MODE=standard
+
+# 獨立控制檔案傳輸與預覽
+KM_FILE_UPLOADS_ENABLED=true
+KM_FILE_DOWNLOADS_ENABLED=true
+KM_FILE_PREVIEWS_ENABLED=true
+```
+
+> 預覽圖片或 PDF 時，瀏覽器仍必須接收檔案內容。若合規要求是不允許使用者
+> 取得檔案資料，請同時設定 `KM_FILE_DOWNLOADS_ENABLED=false` 與
+> `KM_FILE_PREVIEWS_ENABLED=false`；只關閉下載會封鎖下載／匯出端點與按鈕，
+> 但不能把已提供給瀏覽器預覽的內容變成不可另存或不可截圖。
+
+`standard` 模式保留富文字編輯器、表格、清單、圖片與內部連結，但不建立
+`/collab/*` WebSocket。內容以「儲存」或 `Ctrl+S` 寫入；若同一頁已由其他人
+更新，畫面會要求比較並解決衝突，不會直接覆蓋他人的內容。
+
 所有設定透過環境變數（`KM_` 前綴）或 `.env`，完整清單見 [.env.example](.env.example) 與 `src/app/shared/config/settings.py`。語意搜尋為選配：未設定 `KM_EMBEDDINGS_BASE_URL` 時自動退回全文搜尋，設定後跑 `km search reindex` 補齊向量。
 
 > Note: repo/package/display name 已改為 **Knowledge Hub**；CLI 與環境變數前綴仍保留 `km` / `KM_`，避免破壞既有 deployment script。

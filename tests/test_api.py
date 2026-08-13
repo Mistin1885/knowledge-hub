@@ -117,6 +117,92 @@ async def test_concurrent_title_autosaves_use_distinct_versions(client, alice, m
     assert {version["title"] for version in versions[:2]} == {"First update", "Second update"}
 
 
+async def test_standard_editor_save_and_conflict_payload(client, alice, monkeypatch):
+    from app.shared.config.settings import settings
+
+    monkeypatch.setattr(settings, "editor_mode", "standard")
+    ws = await make_workspace(client, "Standard editor")
+    page = (
+        await client.post(
+            f"/api/v1/workspaces/{ws['id']}/pages",
+            json={"title": "Shared", "content_md": "# Base\n"},
+        )
+    ).json()
+
+    assert page["editor_doc"]["type"] == "doc"
+    original_revision = page["content_revision"]
+    first = await client.put(
+        f"/api/v1/pages/{page['id']}/content",
+        json={
+            "base_revision": original_revision,
+            "editor_doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 1},
+                        "content": [{"type": "text", "text": "First save"}],
+                    }
+                ],
+            },
+        },
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["content_md"] == "# First save\n"
+
+    stale = await client.put(
+        f"/api/v1/pages/{page['id']}/content",
+        json={"base_revision": original_revision, "content_md": "# My stale edit\n"},
+    )
+    assert stale.status_code == 409
+    conflict = stale.json()
+    assert conflict["current_content_md"] == "# First save\n"
+    assert conflict["proposed_content_md"] == "# My stale edit\n"
+    assert conflict["current_revision"] == first.json()["content_revision"]
+    assert conflict["current_editor_doc"]["type"] == "doc"
+
+    resolved = await client.put(
+        f"/api/v1/pages/{page['id']}/content",
+        json={
+            "base_revision": conflict["current_revision"],
+            "content_md": "# First save\n\nResolved with my note.\n",
+        },
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert "Resolved with my note" in resolved.json()["content_md"]
+
+
+async def test_runtime_config_and_file_feature_guards(client, alice, monkeypatch):
+    from app.shared.config.settings import settings
+
+    monkeypatch.setattr(settings, "editor_mode", "standard")
+    monkeypatch.setattr(settings, "file_uploads_enabled", False)
+    monkeypatch.setattr(settings, "file_downloads_enabled", False)
+    monkeypatch.setattr(settings, "file_previews_enabled", False)
+
+    config = await client.get("/api/v1/config")
+    assert config.status_code == 200
+    assert config.json() == {
+        "editor_mode": "standard",
+        "file_uploads_enabled": False,
+        "file_downloads_enabled": False,
+        "file_previews_enabled": False,
+    }
+
+    ws = await make_workspace(client, "No transfers")
+    upload = await client.post(
+        f"/api/v1/workspaces/{ws['id']}/files",
+        files={"file": ("blocked.txt", b"blocked", "text/plain")},
+    )
+    assert upload.status_code == 403
+
+    page = (
+        await client.post(f"/api/v1/workspaces/{ws['id']}/pages", json={"title": "Page"})
+    ).json()
+    assert (await client.get(f"/api/v1/pages/{page['id']}/export")).status_code == 403
+    assert (await client.get(f"/api/v1/pages/{page['id']}/export.pdf")).status_code == 403
+
+
 async def test_link_resolution_loads_workspace_once_per_batch(client, alice, monkeypatch):
     from app.modules.pages.services import vault
 

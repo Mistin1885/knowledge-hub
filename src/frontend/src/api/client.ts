@@ -1,12 +1,14 @@
 export class ApiError extends Error {
   status: number;
   detail: string;
+  data: Record<string, unknown> | null;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, data: Record<string, unknown> | null = null) {
     super(detail);
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.data = data;
   }
 }
 
@@ -46,13 +48,15 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
   if (!res.ok) {
     let detail = res.statusText || `Request failed (${res.status})`;
+    let errorData: Record<string, unknown> | null = null;
     try {
-      const data = (await res.json()) as { detail?: unknown };
+      const data = (await res.json()) as Record<string, unknown> & { detail?: unknown };
+      errorData = data;
       if (typeof data.detail === 'string' && data.detail) detail = data.detail;
     } catch {
       // non-JSON error body
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, errorData);
   }
 
   if (res.status === 204) return undefined as T;
@@ -63,5 +67,6 @@ export const http = {
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T>(path: string, json?: unknown) => request<T>(path, { method: 'POST', json }),
   patch: <T>(path: string, json: unknown) => request<T>(path, { method: 'PATCH', json }),
+  put: <T>(path: string, json: unknown) => request<T>(path, { method: 'PUT', json }),
   delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
 };

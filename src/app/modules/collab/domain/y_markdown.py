@@ -8,7 +8,9 @@ atoms (hardBreak) are XmlElements between text runs.
 Wikilinks `[[Title]]` are plain text by design — the editor decorates them.
 """
 
+import hashlib
 import re
+from typing import Any
 from urllib.parse import quote
 
 from markdown_it import MarkdownIt
@@ -79,6 +81,10 @@ def normalize_internal_image_markdown(markdown: str) -> str:
         output.append(safe_source)
         cursor = source_end
     return "".join(output)
+
+
+def content_revision(markdown: str) -> str:
+    return hashlib.sha256(markdown.encode()).hexdigest()
 
 
 def _image_to_md(alt: str, source: str) -> str:
@@ -324,6 +330,111 @@ def fragment_to_md(frag: XmlFragment) -> str:
     blocks = [_block_to_md(child, "") for child in frag.children]
     md = "\n\n".join(b for b in blocks if b is not None)
     return md.strip("\n") + ("\n" if md.strip() else "")
+
+
+def markdown_to_tiptap_json(markdown: str) -> dict[str, Any]:
+    """Convert authoritative Markdown into the JSON document TipTap accepts.
+
+    This deliberately reuses the collaboration schema conversion so standard
+    and collaborative deployments render exactly the same document features.
+    """
+    from pycrdt import Doc
+
+    doc = Doc()
+    frag = doc.get("default", type=XmlFragment)
+    md_to_fragment(markdown, frag)
+    return {"type": "doc", "content": [_xml_node_to_json(node) for node in frag.children]}
+
+
+def tiptap_json_to_markdown(document: dict[str, Any]) -> str:
+    """Convert a validated TipTap JSON document through the shared Yjs schema."""
+    from pycrdt import Doc
+
+    if document.get("type") != "doc" or not isinstance(document.get("content", []), list):
+        raise ValueError("Editor document must be a TipTap doc")
+    doc = Doc()
+    frag = doc.get("default", type=XmlFragment)
+    for node in document.get("content", []):
+        _append_json_node(frag, node)
+    if not frag.children:
+        frag.children.append(XmlElement("paragraph"))
+    return fragment_to_md(frag)
+
+
+def _xml_node_to_json(node) -> dict[str, Any]:
+    if isinstance(node, XmlText):
+        # XmlText can contain differently formatted runs. TipTap represents
+        # those as adjacent text nodes, so callers flatten this special shape.
+        raise TypeError("Text runs must be converted by _xml_children_to_json")
+    result: dict[str, Any] = {"type": node.tag}
+    attrs = {key: _normalize_json_number(value) for key, value in dict(node.attributes).items()}
+    if attrs:
+        result["attrs"] = attrs
+    children = _xml_children_to_json(node)
+    if children:
+        result["content"] = children
+    return result
+
+
+def _xml_children_to_json(node) -> list[dict[str, Any]]:
+    children: list[dict[str, Any]] = []
+    for child in node.children:
+        if isinstance(child, XmlText):
+            for text, marks in child.diff():
+                if not text:
+                    continue
+                item: dict[str, Any] = {"type": "text", "text": text}
+                converted_marks = []
+                for name, attrs in (marks or {}).items():
+                    if attrs is None:
+                        continue
+                    mark: dict[str, Any] = {"type": name}
+                    if attrs:
+                        mark["attrs"] = attrs
+                    converted_marks.append(mark)
+                if converted_marks:
+                    item["marks"] = converted_marks
+                children.append(item)
+        else:
+            children.append(_xml_node_to_json(child))
+    return children
+
+
+def _normalize_json_number(value: Any) -> Any:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+def _append_json_node(parent, node: Any) -> None:
+    if not isinstance(node, dict) or not isinstance(node.get("type"), str):
+        raise ValueError("Invalid editor node")
+    node_type = node["type"]
+    if node_type == "text":
+        text = node.get("text")
+        if not isinstance(text, str):
+            raise ValueError("Text node is missing text")
+        marks: dict[str, dict] = {}
+        for mark in node.get("marks", []):
+            if not isinstance(mark, dict) or not isinstance(mark.get("type"), str):
+                raise ValueError("Invalid editor mark")
+            marks[mark["type"]] = mark.get("attrs") or {}
+        text_node = parent.children.append(XmlText())
+        text_node.insert(0, text, marks or None)
+        return
+    if node_type == "doc":
+        for child in node.get("content", []):
+            _append_json_node(parent, child)
+        return
+    attrs = node.get("attrs") or None
+    if attrs is not None and not isinstance(attrs, dict):
+        raise ValueError("Invalid editor node attributes")
+    element = parent.children.append(XmlElement(node_type, attrs))
+    content = node.get("content", [])
+    if not isinstance(content, list):
+        raise ValueError("Invalid editor node content")
+    for child in content:
+        _append_json_node(element, child)
 
 
 def _block_to_md(node, indent: str) -> str | None:

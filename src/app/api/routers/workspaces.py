@@ -20,6 +20,7 @@ from app.modules.pages.services import export as export_service
 from app.modules.workspaces.services import policy, workspaces
 from app.shared.constants import Permission, Role, role_permissions
 from app.shared.exceptions import ValidationFailedError
+from app.shared.features import require_file_downloads
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -66,6 +67,7 @@ async def delete_workspace(workspace_id: uuid.UUID, user: CurrentUser, s: DB):
 @router.get("/{workspace_id}/export")
 async def export_workspace(workspace_id: uuid.UUID, user: CurrentUser, s: DB) -> Response:
     """All pages the user can see, zipped with the folder structure preserved."""
+    require_file_downloads()
     filename, data = await export_service.export_workspace(s, user, workspace_id)
     return Response(
         content=data,

@@ -9,6 +9,7 @@ import WorkspaceSwitcher from './WorkspaceSwitcher';
 import PageTree from '../sidebar/PageTree';
 import TagsSection from '../sidebar/TagsSection';
 import { useImportManager } from '../imports/ImportManager';
+import { useRuntimeConfig } from '../../hooks/queries';
 
 const SIDEBAR_WIDTH_KEY = 'km:sidebar-width';
 const DEFAULT_SIDEBAR_WIDTH = 256;
@@ -41,6 +42,8 @@ export default function Sidebar({
   const uploadFiles = useUploadFiles(workspace.id);
   const { isImporting, startImport } = useImportManager();
   const canEdit = workspace.my_role !== 'viewer';
+  const configQ = useRuntimeConfig();
+  const uploadsEnabled = configQ.data?.file_uploads_enabled ?? false;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
@@ -150,31 +153,35 @@ export default function Sidebar({
                       newPage(true);
                     }}
                   />
-                  <div className="my-1 border-t border-neutral-100" />
-                  <MenuItem
-                    icon={<FileUp size={13} />}
-                    label="Upload files…"
-                    onClick={() => {
-                      close();
-                      vaultFileInputRef.current?.click();
-                    }}
-                  />
-                  <MenuItem
-                    icon={<FileUp size={13} />}
-                    label="Import file…"
-                    onClick={() => {
-                      close();
-                      fileInputRef.current?.click();
-                    }}
-                  />
-                  <MenuItem
-                    icon={<FolderUp size={13} />}
-                    label="Import folder / Obsidian Vault…"
-                    onClick={() => {
-                      close();
-                      dirInputRef.current?.click();
-                    }}
-                  />
+                  {uploadsEnabled && (
+                    <>
+                      <div className="my-1 border-t border-neutral-100" />
+                      <MenuItem
+                        icon={<FileUp size={13} />}
+                        label="Upload files…"
+                        onClick={() => {
+                          close();
+                          vaultFileInputRef.current?.click();
+                        }}
+                      />
+                      <MenuItem
+                        icon={<FileUp size={13} />}
+                        label="Import file…"
+                        onClick={() => {
+                          close();
+                          fileInputRef.current?.click();
+                        }}
+                      />
+                      <MenuItem
+                        icon={<FolderUp size={13} />}
+                        label="Import folder / Obsidian Vault…"
+                        onClick={() => {
+                          close();
+                          dirInputRef.current?.click();
+                        }}
+                      />
+                    </>
+                  )}
                 </>
               )}
             </Dropdown>
@@ -185,7 +192,7 @@ export default function Sidebar({
             {importNote}
           </p>
         )}
-        <PageTree workspace={workspace} />
+        <PageTree workspace={workspace} config={configQ.data} />
         <TagsSection workspace={workspace} />
       </div>
       <input

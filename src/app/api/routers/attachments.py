@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, UploadFile, status
+from fastapi import APIRouter, Query, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.api.deps import DB, CurrentUser
@@ -10,6 +10,8 @@ from app.modules.pages.services import attachments as attachments_service
 from app.modules.pages.services import pages as pages_service
 from app.modules.pages.services import vault
 from app.modules.workspaces.services import policy
+from app.shared.config.settings import settings
+from app.shared.features import require_file_downloads, require_file_previews, require_file_uploads
 
 router = APIRouter(tags=["attachments"])
 
@@ -24,8 +26,16 @@ def _out(att) -> AttachmentOut:
         url=f"/api/v1/attachments/{att.id}/{att.filename}",
         created_at=att.created_at,
         preview_kind=preview_kind,
-        preview_url=f"/api/v1/attachments/{att.id}/{att.filename}" if preview_kind else None,
-        download_url=f"/api/v1/attachments/{att.id}/{att.filename}",
+        preview_url=(
+            f"/api/v1/attachments/{att.id}/{att.filename}?download=true"
+            if preview_kind and settings.file_previews_enabled
+            else None
+        ),
+        download_url=(
+            f"/api/v1/attachments/{att.id}/{att.filename}"
+            if settings.file_downloads_enabled
+            else None
+        ),
     )
 
 
@@ -39,8 +49,10 @@ def _out_file(node, asset, preview_kind: str | None) -> AttachmentOut:
         url=compatibility_url,
         created_at=node.created_at,
         preview_kind=preview_kind,
-        preview_url=compatibility_url if preview_kind else None,
-        download_url=f"/api/v1/files/{node.id}/download",
+        preview_url=compatibility_url if preview_kind and settings.file_previews_enabled else None,
+        download_url=(
+            f"/api/v1/files/{node.id}/download" if settings.file_downloads_enabled else None
+        ),
     )
 
 
@@ -50,6 +62,7 @@ def _out_file(node, asset, preview_kind: str | None) -> AttachmentOut:
     status_code=status.HTTP_201_CREATED,
 )
 async def upload(page_id: uuid.UUID, file: UploadFile, user: CurrentUser, s: DB):
+    require_file_uploads()
     parent = await pages_service.get_for_edit(s, user, page_id)
     node, asset, preview_kind = await vault.upload_file(
         s, user, parent.workspace_id, file, parent_id=page_id
@@ -71,16 +84,40 @@ async def list_attachments(page_id: uuid.UUID, user: CurrentUser, s: DB):
 
 
 @router.get("/attachments/{attachment_id}/{filename}")
-async def download(attachment_id: uuid.UUID, filename: str, user: CurrentUser, s: DB):
+async def download(
+    attachment_id: uuid.UUID,
+    filename: str,
+    user: CurrentUser,
+    s: DB,
+    download: bool = Query(False),
+):
     migrated = await vault.get_legacy_file(s, user, attachment_id)
     if migrated is not None:
         node, asset, path, preview_kind = migrated
+        if download:
+            require_file_downloads()
+        elif preview_kind:
+            require_file_previews()
+        else:
+            require_file_downloads()
         return FileResponse(
             path,
             media_type=asset.content_type,
             filename=node.title,
-            content_disposition_type="inline" if preview_kind else "attachment",
+            content_disposition_type="attachment" if download or not preview_kind else "inline",
             headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
         )
     att, path = await attachments_service.open_for_read(s, user, attachment_id)
-    return FileResponse(path, media_type=att.content_type, filename=att.filename)
+    preview_kind = vault.preview_kind_for_content_type(att.content_type)
+    if download:
+        require_file_downloads()
+    elif preview_kind:
+        require_file_previews()
+    else:
+        require_file_downloads()
+    return FileResponse(
+        path,
+        media_type=att.content_type,
+        filename=att.filename,
+        content_disposition_type="attachment" if download or not preview_kind else "inline",
+    )

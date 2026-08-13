@@ -19,6 +19,7 @@ import type {
   PageVersionDetail,
   PageVisibility,
   RelatedPage,
+  RuntimeConfig,
   Role,
   SearchMode,
   SearchResponse,
@@ -38,6 +39,10 @@ export const authApi = {
   tokens: () => http.get<ApiToken[]>('/auth/tokens'),
   createToken: (name: string) => http.post<CreatedApiToken>('/auth/tokens', { name }),
   revokeToken: (id: string) => http.delete(`/auth/tokens/${id}`),
+};
+
+export const configApi = {
+  get: () => http.get<RuntimeConfig>('/config'),
 };
 
 export interface CreateWorkspaceInput {
@@ -148,6 +153,14 @@ export const pageApi = {
     http.post<PageDetail>(`/workspaces/${workspaceId}/pages`, data),
   get: (id: string) => http.get<PageDetail>(`/pages/${id}`),
   update: (id: string, data: UpdatePageInput) => http.patch<PageDetail>(`/pages/${id}`, data),
+  saveContent: (
+    id: string,
+    data: {
+      base_revision: string;
+      editor_doc?: Record<string, unknown>;
+      content_md?: string;
+    },
+  ) => http.put<PageDetail>(`/pages/${id}/content`, data),
   move: (id: string, parentId: string | null, beforeId: string | null) =>
     http.patch<PageDetail>(`/pages/${id}/move`, {
       parent_id: parentId,

@@ -1,11 +1,20 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   authApi,
+  configApi,
   mentionApi,
   pageApi,
   workspaceApi,
   type SearchParams,
 } from '../api/endpoints';
+
+export function useRuntimeConfig() {
+  return useQuery({
+    queryKey: ['runtime-config'],
+    queryFn: configApi.get,
+    staleTime: Infinity,
+  });
+}
 
 export function useMe() {
   return useQuery({ queryKey: ['me'], queryFn: authApi.me, staleTime: 60_000 });

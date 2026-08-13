@@ -39,7 +39,7 @@ interface ImageInsertResult {
   failed: number;
 }
 
-function findImageAt(view: EditorView, src: string): { pos: number; attrs: Record<string, unknown> } | null {
+export function findImageAt(view: EditorView, src: string): { pos: number; attrs: Record<string, unknown> } | null {
   let match: { pos: number; attrs: Record<string, unknown> } | null = null;
   view.state.doc.descendants((node, pos) => {
     if (!match && node.type === view.state.schema.nodes.image && node.attrs.src === src) {
@@ -69,7 +69,7 @@ function removePendingImage(view: EditorView, localSrc: string) {
 }
 
 /** Insert local previews immediately, then replace them with committed attachment URLs. */
-async function insertImagesAt(
+export async function insertImagesAt(
   view: EditorView,
   pageId: string,
   files: File[],
@@ -106,7 +106,7 @@ async function insertImagesAt(
   return { uploaded: results.length - failed, failed };
 }
 
-function imageFiles(list: DataTransfer | null): File[] {
+export function imageFiles(list: DataTransfer | null): File[] {
   return Array.from(list?.files ?? []).filter((f) => f.type.startsWith('image/'));
 }
 import { ConnectionIndicator, PresenceAvatars, type CollabStatus, type PeerUser } from './indicators';
@@ -117,10 +117,13 @@ interface Props {
   user: User;
   pages: Page[];
   editable: boolean;
+  fileUploadsEnabled: boolean;
 }
 
 /** Mount with key={pageId}: the Yjs doc + provider live for exactly one page visit. */
-export default function CollabEditor({ pageId, workspace, user, pages, editable }: Props) {
+export default function CollabEditor({
+  pageId, workspace, user, pages, editable, fileUploadsEnabled,
+}: Props) {
   const navigate = useNavigate();
   const createPage = useCreatePage(workspace.id);
 
@@ -336,7 +339,12 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
       // the markdown keeps a stable /api/v1/attachments/... reference.
       handlePaste: (view, event) => {
         const files = imageFiles(event.clipboardData);
-        if (files.length === 0 || !view.editable) return false;
+        if (files.length === 0) return false;
+        if (!view.editable || !fileUploadsEnabled) {
+          event.preventDefault();
+          setImageUploadError(true);
+          return true;
+        }
         event.preventDefault();
         uploadImages(view, files, view.state.selection.to);
         return true;
@@ -344,7 +352,12 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
       handleDrop: (view, event, _slice, moved) => {
         if (moved) return false; // internal block drag — let ProseMirror move it
         const files = imageFiles(event.dataTransfer);
-        if (files.length === 0 || !view.editable) return false;
+        if (files.length === 0) return false;
+        if (!view.editable || !fileUploadsEnabled) {
+          event.preventDefault();
+          setImageUploadError(true);
+          return true;
+        }
         event.preventDefault();
         const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
         uploadImages(view, files, coords?.pos ?? view.state.selection.to);
@@ -419,7 +432,9 @@ export default function CollabEditor({ pageId, workspace, user, pages, editable 
             <span className="text-[11px] text-neutral-500">Uploading {imageUploads} image…</span>
           )}
           {imageUploadError && imageUploads === 0 && (
-            <span className="text-[11px] text-red-600">Image upload failed. Please paste again.</span>
+            <span className="text-[11px] text-red-600">
+              {fileUploadsEnabled ? 'Image upload failed. Please paste again.' : 'File uploads are disabled.'}
+            </span>
           )}
           <PresenceAvatars peers={peers} />
         </div>

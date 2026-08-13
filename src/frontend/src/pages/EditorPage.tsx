@@ -4,11 +4,13 @@ import { ChevronDown } from 'lucide-react';
 import type { PageDetail, PageStatus } from '../api/types';
 import { ApiError } from '../api/client';
 import { useWorkspaceCtx } from '../components/layout/WorkspaceLayout';
-import { usePage, usePages } from '../hooks/queries';
+import { usePage, usePages, useRuntimeConfig } from '../hooks/queries';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUpdatePage } from '../hooks/mutations';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { cn } from '../lib/utils';
 import CollabEditor from '../components/editor/CollabEditor';
+import StandardEditor from '../components/editor/StandardEditor';
 import FolderView from '../components/folder/FolderView';
 import FileView from '../components/vault/FileView';
 import CommentsSection from '../components/comments/CommentsSection';
@@ -160,10 +162,12 @@ export default function EditorPage() {
   const { pageId = '' } = useParams();
   const { workspace, user } = useWorkspaceCtx();
   const pageQ = usePage(pageId);
+  const configQ = useRuntimeConfig();
+  const queryClient = useQueryClient();
   const pagesQ = usePages(workspace.id);
   const canEdit = workspace.my_role !== 'viewer';
 
-  if (pageQ.isLoading) {
+  if (pageQ.isLoading || configQ.isLoading) {
     return (
       <Centered>
         <Spinner />
@@ -171,7 +175,7 @@ export default function EditorPage() {
     );
   }
 
-  if (pageQ.isError || !pageQ.data) {
+  if (pageQ.isError || configQ.isError || !pageQ.data || !configQ.data) {
     const notFound = pageQ.error instanceof ApiError && pageQ.error.status === 404;
     return (
       <Centered>
@@ -202,14 +206,27 @@ export default function EditorPage() {
               canEdit={canEdit}
             />
           ) : (
-            <CollabEditor
-              key={`editor:${page.id}`}
-              pageId={page.id}
-              workspace={workspace}
-              user={user}
-              pages={pagesQ.data ?? []}
-              editable={canEdit}
-            />
+            configQ.data.editor_mode === 'standard' ? (
+              <StandardEditor
+                key={`standard-editor:${page.id}`}
+                page={page}
+                workspace={workspace}
+                pages={pagesQ.data ?? []}
+                editable={canEdit}
+                config={configQ.data}
+                onSaved={(saved) => queryClient.setQueryData(['page', page.id], saved)}
+              />
+            ) : (
+              <CollabEditor
+                key={`editor:${page.id}`}
+                pageId={page.id}
+                workspace={workspace}
+                user={user}
+                pages={pagesQ.data ?? []}
+                editable={canEdit}
+                fileUploadsEnabled={configQ.data.file_uploads_enabled}
+              />
+            )
           )}
           <CommentsSection pageId={page.id} user={user} canComment={canEdit} />
         </div>

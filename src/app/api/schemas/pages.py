@@ -92,8 +92,24 @@ class VaultTreeNodeOut(BaseModel):
 
 class PageDetailOut(PageOut):
     content_md: str
+    content_revision: str
+    editor_doc: dict[str, Any]
     backlink_count: int
     outgoing_count: int
+
+
+class PageContentSaveIn(BaseModel):
+    base_revision: str = Field(min_length=64, max_length=64)
+    editor_doc: dict[str, Any] | None = None
+    content_md: str | None = None
+
+
+class PageContentConflictOut(BaseModel):
+    detail: str
+    current_content_md: str
+    current_revision: str
+    current_editor_doc: dict[str, Any]
+    proposed_content_md: str
 
 
 class ChildPageOut(BaseModel):
@@ -161,7 +177,7 @@ class AttachmentOut(BaseModel):
     created_at: datetime
     preview_kind: str | None = None
     preview_url: str | None = None
-    download_url: str
+    download_url: str | None
 
 
 class ShareOut(BaseModel):

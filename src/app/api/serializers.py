@@ -4,9 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas.pages import PageDetailOut, PageOut, VaultTreeNodeOut
 from app.infra.db.models import Page, User
+from app.modules.collab.domain import y_markdown
 from app.modules.links.services import links as links_service
 from app.modules.pages.infra import repo as pages_repo
 from app.modules.pages.services import vault
+from app.shared.config.settings import settings
 
 
 async def page_out(
@@ -38,8 +40,16 @@ async def page_out(
         content_type=asset.content_type if asset else None,
         size=asset.size if asset else None,
         preview_kind=preview_kind,
-        preview_url=f"/api/v1/files/{page.id}/preview" if preview_kind else None,
-        download_url=f"/api/v1/files/{page.id}/download" if asset else None,
+        preview_url=(
+            f"/api/v1/files/{page.id}/preview"
+            if preview_kind and settings.file_previews_enabled
+            else None
+        ),
+        download_url=(
+            f"/api/v1/files/{page.id}/download"
+            if asset and settings.file_downloads_enabled
+            else None
+        ),
         file_count=file_count if page.node_type == "folder" or page.is_folder else None,
     )
 
@@ -81,8 +91,16 @@ async def pages_out(
                 content_type=asset.content_type if asset else None,
                 size=asset.size if asset else None,
                 preview_kind=preview_kind,
-                preview_url=f"/api/v1/files/{page.id}/preview" if preview_kind else None,
-                download_url=f"/api/v1/files/{page.id}/download" if asset else None,
+                preview_url=(
+                    f"/api/v1/files/{page.id}/preview"
+                    if preview_kind and settings.file_previews_enabled
+                    else None
+                ),
+                download_url=(
+                    f"/api/v1/files/{page.id}/download"
+                    if asset and settings.file_downloads_enabled
+                    else None
+                ),
                 file_count=(file_counts or {}).get(page.id)
                 if page.node_type == "folder" or page.is_folder
                 else None,
@@ -135,6 +153,8 @@ async def page_detail_out(s: AsyncSession, page: Page) -> PageDetailOut:
     return PageDetailOut(
         **base.model_dump(),
         content_md=page.content_md,
+        content_revision=y_markdown.content_revision(page.content_md),
+        editor_doc=y_markdown.markdown_to_tiptap_json(page.content_md),
         backlink_count=inbound,
         outgoing_count=outbound,
     )

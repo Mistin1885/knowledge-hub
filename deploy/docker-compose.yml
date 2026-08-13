@@ -24,7 +24,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    image: mistin1885/knowledge-hub-app:v1.1.3
+    image: mistin1885/knowledge-hub-app:v1.2.0
     environment:
       KM_DATABASE_URL: postgresql+asyncpg://km:${KM_DB_PASSWORD:?Set KM_DB_PASSWORD in .env}@db:5432/km
       KM_UPLOADS_DIR: /srv/knowledge-hub/data/uploads
@@ -38,6 +38,10 @@ services:
       KM_DEFAULT_READONLY_WORKSPACE_SLUG: ${KM_DEFAULT_READONLY_WORKSPACE_SLUG:-demo}
       KM_MAX_UPLOAD: ${KM_MAX_UPLOAD:-5G}
       KM_MAX_UPLOAD_MB: ${KM_MAX_UPLOAD_MB:-5120}
+      KM_EDITOR_MODE: ${KM_EDITOR_MODE:-collaborative}
+      KM_FILE_UPLOADS_ENABLED: ${KM_FILE_UPLOADS_ENABLED:-true}
+      KM_FILE_DOWNLOADS_ENABLED: ${KM_FILE_DOWNLOADS_ENABLED:-true}
+      KM_FILE_PREVIEWS_ENABLED: ${KM_FILE_PREVIEWS_ENABLED:-true}
     volumes:
       # Uploaded files/attachments are filesystem data created by users.
       - ${KM_DATA_DIR:-../data}/uploads:/srv/knowledge-hub/data/uploads

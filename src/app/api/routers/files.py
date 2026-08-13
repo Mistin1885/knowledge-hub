@@ -8,6 +8,7 @@ from app.api.deps import DB, CurrentUser
 from app.api.schemas.pages import PageOut, VaultImportOut
 from app.modules.pages.services import vault
 from app.shared.exceptions import ValidationFailedError
+from app.shared.features import require_file_downloads, require_file_previews, require_file_uploads
 
 router = APIRouter(tags=["files"])
 
@@ -24,6 +25,7 @@ async def upload_file(
     s: DB,
     parent_id: uuid.UUID | None = Query(None),
 ):
+    require_file_uploads()
     node, _asset, _preview_kind = await vault.upload_file(
         s, user, workspace_id, file, parent_id=parent_id
     )
@@ -43,6 +45,7 @@ async def import_vault_item(
     relative_path: str = Query(..., min_length=1, max_length=4000),
     parent_id: uuid.UUID | None = Query(None),
 ):
+    require_file_uploads()
     action, node, folders_created, warnings = await vault.import_vault_item(
         s,
         user,
@@ -61,6 +64,7 @@ async def import_vault_item(
 
 @router.get("/files/{node_id}/preview")
 async def preview_file(node_id: uuid.UUID, user: CurrentUser, s: DB):
+    require_file_previews()
     node, asset, path, preview_kind = await vault.get_file(s, user, node_id)
     if preview_kind is None:
         raise ValidationFailedError("This file type is not available for browser preview")
@@ -75,6 +79,7 @@ async def preview_file(node_id: uuid.UUID, user: CurrentUser, s: DB):
 
 @router.get("/files/{node_id}/download")
 async def download_file(node_id: uuid.UUID, user: CurrentUser, s: DB):
+    require_file_downloads()
     node, asset, path, _preview_kind = await vault.get_file(s, user, node_id)
     return FileResponse(
         path,

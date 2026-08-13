@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -33,8 +34,15 @@ class Settings(BaseSettings):
     embeddings_timeout_s: float = 30.0
 
     # Collaboration
+    editor_mode: Literal["collaborative", "standard"] = "collaborative"
     collab_snapshot_debounce_s: float = 3.0
     collab_persist_every_updates: int = 50
+
+    # File transfer features. Preview is separate from download so existing
+    # inline page images can remain visible in a read-mostly deployment.
+    file_uploads_enabled: bool = True
+    file_downloads_enabled: bool = True
+    file_previews_enabled: bool = True
 
     log_level: str = "INFO"
 
